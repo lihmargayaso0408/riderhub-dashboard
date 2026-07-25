@@ -113,28 +113,60 @@
   const hasRealStorage = (typeof window.storage !== 'undefined') && window.storage
     && typeof window.storage.get === 'function' && typeof window.storage.set === 'function';
 
-  const storage = hasRealStorage ? window.storage : {
-    async get(key){
-      const value = localStorage.getItem(key);
-      return value===null ? null : {key, value};
-    },
-    async set(key,value){
-      localStorage.setItem(key,value);
-      return {key,value};
-    },
-    async delete(key){
-      localStorage.removeItem(key);
-      return {key, deleted:true};
-    },
-    async list(prefix=''){
-      const keys=[];
-      for(let i=0;i<localStorage.length;i++){
-        const k=localStorage.key(i);
-        if(!prefix || k.startsWith(prefix)) keys.push(k);
-      }
-      return {keys};
-    },
-  };
+    const storage = {
+      async get(key){
+        try{
+          if(hasRealStorage) return await window.storage.get(key, false);
+        }catch(e){}
+        try{
+          if(window.supabaseAPI && window.supabaseAPI.isEnabled && window.supabaseAPI.isEnabled()){
+            return await window.supabaseAPI.get(key);
+          }
+        }catch(e){}
+        const value = localStorage.getItem(key);
+        return value===null ? null : {key, value};
+      },
+      async set(key,value){
+        try{
+          if(hasRealStorage) return await window.storage.set(key,value, false);
+        }catch(e){}
+        try{
+          if(window.supabaseAPI && window.supabaseAPI.isEnabled && window.supabaseAPI.isEnabled()){
+            return await window.supabaseAPI.set(key, value);
+          }
+        }catch(e){}
+        localStorage.setItem(key,value);
+        return {key,value};
+      },
+      async delete(key){
+        try{
+          if(hasRealStorage) return await window.storage.delete(key, false);
+        }catch(e){}
+        try{
+          if(window.supabaseAPI && window.supabaseAPI.isEnabled && window.supabaseAPI.isEnabled()){
+            return await window.supabaseAPI.delete(key);
+          }
+        }catch(e){}
+        localStorage.removeItem(key);
+        return {key, deleted:true};
+      },
+      async list(prefix=''){
+        try{
+          if(hasRealStorage) return await window.storage.list(prefix, false);
+        }catch(e){}
+        try{
+          if(window.supabaseAPI && window.supabaseAPI.isEnabled && window.supabaseAPI.isEnabled()){
+            return await window.supabaseAPI.list(prefix);
+          }
+        }catch(e){}
+        const keys=[];
+        for(let i=0;i<localStorage.length;i++){
+          const k=localStorage.key(i);
+          if(!prefix || k.startsWith(prefix)) keys.push(k);
+        }
+        return {keys};
+      },
+    };
 
   async function getIndex(){
     try{ const r = await storage.get('hubs-index', false); return r? JSON.parse(r.value) : {Bauko:[],Buguias:[]}; }
