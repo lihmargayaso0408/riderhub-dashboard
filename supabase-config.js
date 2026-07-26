@@ -3,7 +3,7 @@
 // Keep this file private — the anon key is public but should still be treated carefully.
 window.SUPABASE_CONFIG = {
   url: 'https://bjujpnyihllbbfqahvok.supabase.co',
-  key: 'sb_publishable_wGak7zw1JvKBJzMKpUm9Bg_JtY8w2th'
+  key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJqdWpwbnlpaGxsYmJmcWFodm9rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUwMTEzMjcsImV4cCI6MjEwMDU4NzMyN30.8YT_x0cgQJZixzyWmdFeJyx_ocZe83OTwvFvVDkkdlw'
 };
 
 // If the Supabase UMD script has already loaded, create a client instance
