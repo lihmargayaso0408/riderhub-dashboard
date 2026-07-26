@@ -1,6 +1,14 @@
 (function(){
   "use strict";
 
+  const hasSupabaseConfig = !!(window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.url && window.SUPABASE_CONFIG.key);
+  const SUPABASE_URL = (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.url) || "YOUR_SUPABASE_PROJECT_URL";
+  const SUPABASE_KEY = (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.key) || "YOUR_SUPABASE_ANON_KEY";
+
+  const supabase = hasSupabaseConfig && window.supabase && typeof window.supabase.createClient === 'function'
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+    : null;
+
   /* ---------------- Field mapping ---------------- */
   const FIELD_MAP = [
     ['driver','driverRaw','raw'],
@@ -112,6 +120,8 @@
 
   const hasRealStorage = (typeof window.storage !== 'undefined') && window.storage
     && typeof window.storage.get === 'function' && typeof window.storage.set === 'function';
+  const hasConfiguredSupabase = !!(window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.url && window.SUPABASE_CONFIG.key);
+  const hasSharedStorage = hasRealStorage || (hasConfiguredSupabase && window.supabaseAPI && window.supabaseAPI.isEnabled && window.supabaseAPI.isEnabled());
 
     const storage = {
       async get(key){
@@ -253,7 +263,7 @@
   }
 
   async function init(){
-    if(!hasRealStorage){
+    if(!hasSharedStorage){
       $('#storageBanner').innerHTML = `<div class="banner">
         <span>Running as a standalone dashboard. Uploaded manifests are now saved in your browser using localStorage and persist after refreshes.</span>
         <button id="dismissBanner">Dismiss</button>

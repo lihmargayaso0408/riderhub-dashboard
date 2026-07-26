@@ -2,8 +2,8 @@
 // Replace the values below with your Supabase project URL and anon key.
 // Keep this file private — the anon key is public but should still be treated carefully.
 window.SUPABASE_CONFIG = {
-  url: 'https://mfwnwfmcbpjkwdcfymar.supabase.co',
-  key: 'sb_publishable_-ZCHBDWm2B6jKZVMV_9WtA_wfJBuJAC'
+  url: 'https://bjujpnyihllbbfqahvok.supabase.co',
+  key: 'sb_publishable_wGak7zw1JvKBJzMKpUm9Bg_JtY8w2th'
 };
 
 // If the Supabase UMD script has already loaded, create a client instance
