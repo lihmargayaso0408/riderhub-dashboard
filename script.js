@@ -120,8 +120,7 @@
 
   const hasRealStorage = (typeof window.storage !== 'undefined') && window.storage
     && typeof window.storage.get === 'function' && typeof window.storage.set === 'function';
-  const hasConfiguredSupabase = !!(window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.url && window.SUPABASE_CONFIG.key);
-  const hasSharedStorage = hasRealStorage || (hasConfiguredSupabase && window.supabaseAPI && window.supabaseAPI.isEnabled && window.supabaseAPI.isEnabled());
+  const hasSharedStorage = hasRealStorage || (window.firebaseAPI && window.firebaseAPI.isEnabled());
 
     const storage = {
       async get(key){
@@ -129,8 +128,8 @@
           if(hasRealStorage) return await window.storage.get(key, false);
         }catch(e){}
         try{
-          if(window.supabaseAPI && window.supabaseAPI.isEnabled && window.supabaseAPI.isEnabled()){
-            return await window.supabaseAPI.get(key);
+          if(window.firebaseAPI && window.firebaseAPI.isEnabled && window.firebaseAPI.isEnabled()){
+            return await window.firebaseAPI.get(key);
           }
         }catch(e){}
         const value = localStorage.getItem(key);
@@ -141,8 +140,8 @@
           if(hasRealStorage) return await window.storage.set(key,value, false);
         }catch(e){}
         try{
-          if(window.supabaseAPI && window.supabaseAPI.isEnabled && window.supabaseAPI.isEnabled()){
-            return await window.supabaseAPI.set(key, value);
+          if(window.firebaseAPI && window.firebaseAPI.isEnabled && window.firebaseAPI.isEnabled()){
+            return await window.firebaseAPI.set(key, value);
           }
         }catch(e){}
         localStorage.setItem(key,value);
@@ -153,8 +152,8 @@
           if(hasRealStorage) return await window.storage.delete(key, false);
         }catch(e){}
         try{
-          if(window.supabaseAPI && window.supabaseAPI.isEnabled && window.supabaseAPI.isEnabled()){
-            return await window.supabaseAPI.delete(key);
+          if(window.firebaseAPI && window.firebaseAPI.isEnabled && window.firebaseAPI.isEnabled()){
+            return await window.firebaseAPI.delete(key);
           }
         }catch(e){}
         localStorage.removeItem(key);
@@ -165,8 +164,8 @@
           if(hasRealStorage) return await window.storage.list(prefix, false);
         }catch(e){}
         try{
-          if(window.supabaseAPI && window.supabaseAPI.isEnabled && window.supabaseAPI.isEnabled()){
-            return await window.supabaseAPI.list(prefix);
+          if(window.firebaseAPI && window.firebaseAPI.isEnabled && window.firebaseAPI.isEnabled()){
+            return await window.firebaseAPI.list(prefix);
           }
         }catch(e){}
         const keys=[];
