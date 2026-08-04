@@ -241,6 +241,23 @@ td.name-cell span{font-size:11px;color:var(--text-dim);font-family:'IBM Plex Mon
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 .toast b{color:var(--amber);}
 
+.week-picker-card{
+  border:1px solid var(--line);border-radius:6px;background:var(--card);padding:10px;
+}
+.week-picker-nav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;}
+.week-picker-nav-btn{
+  border:1px solid var(--line);background:var(--card);color:var(--text);width:30px;height:30px;border-radius:4px;cursor:pointer;
+}
+.week-picker-month{font-size:13px;font-weight:600;text-align:center;flex:1;}
+.week-picker-headings{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;font-size:11px;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px;text-align:center;}
+.week-picker-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+.week-picker-cell{
+  border:1px solid var(--line-2);background:var(--card);color:var(--text);padding:7px 0;border-radius:4px;cursor:pointer;font-size:12px;
+}
+.week-picker-cell.muted{opacity:.45;}
+.week-picker-cell.selected{background:var(--amber);color:var(--ink);border-color:var(--amber);font-weight:700;}
+.week-picker-selection{font-size:12px;color:var(--text-dim);margin-top:8px;}
+
 .banner{
   background:#FCEFD9;border:1px solid var(--amber-deep);color:#6B4A15;
   border-radius:5px;padding:12px 16px;font-size:13px;margin-bottom:18px;

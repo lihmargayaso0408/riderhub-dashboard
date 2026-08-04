@@ -70,8 +70,8 @@
 <!-- Upload modal -->
 <div class="overlay" id="overlay">
   <div class="modal">
-    <h3>Upload today's manifest</h3>
-    <p class="hint">Drop in the daily performance CSV. It gets added to the hub's history — nothing gets overwritten unless the date matches.</p>
+    <h3>Upload weekly manifest</h3>
+    <p class="hint">Drop in the weekly performance CSV. It gets added to the hub's history — nothing gets overwritten unless the week matches.</p>
     <div class="field">
       <label for="hubSelect">Hub</label>
       <select id="hubSelect">
@@ -80,8 +80,21 @@
       </select>
     </div>
     <div class="field">
-      <label for="dateInput">Report date</label>
-      <input type="date" id="dateInput">
+      <label for="dateInput">Week start (Monday)</label>
+      <div class="week-picker-card" id="weekPickerCard">
+        <div class="week-picker-nav">
+          <button type="button" id="weekPrevBtn" class="week-picker-nav-btn" aria-label="Previous month">‹</button>
+          <div id="weekPickerMonthLabel" class="week-picker-month">Month</div>
+          <button type="button" id="weekNextBtn" class="week-picker-nav-btn" aria-label="Next month">›</button>
+        </div>
+        <div class="week-picker-headings">
+          <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+        </div>
+        <div id="weekPickerGrid" class="week-picker-grid"></div>
+        <input type="hidden" id="dateInput" value="">
+        <div id="weekSelectionText" class="week-picker-selection">Selected week: —</div>
+      </div>
+      <div id="weekHint" style="font-size:12px;color:var(--text-dim);margin-top:6px;">Choose any day in the week. The Monday start of that week will be stored.</div>
     </div>
     <div class="field">
       <label>File</label>

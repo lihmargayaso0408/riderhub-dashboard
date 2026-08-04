@@ -208,6 +208,8 @@
     filterGroup: '',
     filterGrade: '',
     trendChart: null,
+    weekPickerMonth: new Date(),
+    weekPickerSelectedDate: null,
   };
 
   const $ = sel => document.querySelector(sel);
@@ -306,7 +308,7 @@
       ? 'Combined snapshot — each hub shown as of its latest upload'
       : `Snapshot for ${fmtDate(state.currentDate)}`;
 
-    renderContent();
+    await renderContent();
     updateLastUpdatedNote();
   }
 
@@ -329,7 +331,26 @@
     $('#emptyUploadBtn').addEventListener('click', openModal);
   }
 
-  function renderContent(){
+  async function buildTrendSeries(hub){
+    const dates = (state.hubIndex[hub]||[]).slice().sort();
+    const series = [];
+    for(const date of dates){
+      const snap = await loadSnapshot(hub, date);
+      if(!snap || !Array.isArray(snap.rows)) continue;
+      const rows = snap.rows;
+      const active = rows.filter(r=>r.daysWorking>0);
+      const avg = key => active.length ? active.reduce((a,r)=>a+r[key],0)/active.length : 0;
+      series.push({
+        date,
+        avgDeliverySuccess: avg('deliverySuccessRate'),
+        avgSLA: avg('slaAchievementRate'),
+        avgAttendance: avg('attendanceRate'),
+      });
+    }
+    return series.length ? series : ((state.summaries[hub]||[]).slice().sort((a,b)=>a.date<b.date?-1:1));
+  }
+
+  async function renderContent(){
     const rows = state.rows;
     const active = rows.filter(r=>r.daysWorking>0);
     const avg = key => active.length ? active.reduce((a,r)=>a+r[key],0)/active.length : 0;
@@ -351,7 +372,7 @@
     html += '</div>';
 
     html += '<div class="panels">';
-    html += `<div class="panel"><h3>Trend</h3><p class="hint">Delivery success, SLA and attendance over time</p><div id="trendWrap"></div></div>`;
+    html += `<div class="panel"><h3>Performance comparison</h3><p class="hint">Top performers vs. needs attention</p><div id="trendWrap"></div></div>`;
     html += `<div class="panel"><h3>By driver group</h3><p class="hint">Avg. delivery success rate per group</p><canvas id="groupChart" height="180"></canvas></div>`;
     html += '</div>';
 
@@ -373,48 +394,57 @@
 
     $('#content').innerHTML = html;
 
-    renderTrend();
+    await renderTrend();
     renderGroupChart(rows);
     renderTopBottom(rows);
     setupTableControls(rows);
     renderTable();
   }
 
-  function renderTrend(){
+  async function renderTrend(){
     const wrap = $('#trendWrap');
-    if(state.currentHub==='All'){
-      wrap.innerHTML = `<div class="trend-disabled">Pick Bauko or Buguias above to see its day-over-day trend.</div>`;
+    const rows = state.rows || [];
+    const active = rows.filter(r=>Number(r.daysWorking||0) > 0);
+    if(active.length < 2){
+      wrap.innerHTML = `<div class="trend-disabled">Upload a manifest with at least two active riders to compare performance.</div>`;
       return;
     }
-    const summary = state.summaries[state.currentHub]||[];
-    if(summary.length < 2){
-      wrap.innerHTML = `<div class="trend-disabled">Upload at least one more day of data for ${state.currentHub} to see a trend line.</div>`;
+
+    const top = active.slice().sort((a,b)=>b.deliverySuccessRate-a.deliverySuccessRate).slice(0,3);
+    const bottom = active.slice().sort((a,b)=>a.deliverySuccessRate-b.deliverySuccessRate).slice(0,3);
+    const topAvg = top.length ? top.reduce((a,r)=>a+r.deliverySuccessRate,0)/top.length : 0;
+    const bottomAvg = bottom.length ? bottom.reduce((a,r)=>a+r.deliverySuccessRate,0)/bottom.length : 0;
+
+    const hasValues = Number.isFinite(topAvg) && Number.isFinite(bottomAvg);
+    if(!hasValues || (topAvg === 0 && bottomAvg === 0)){
+      wrap.innerHTML = `<div class="trend-disabled">No performance values were found for the current manifest.</div>`;
       return;
     }
-    wrap.innerHTML = `<canvas id="trendCanvas" height="180"></canvas>`;
+
+    wrap.innerHTML = `<canvas id="trendCanvas" height="220"></canvas>`;
     if(typeof Chart === 'undefined'){
-      wrap.innerHTML = `<div class="trend-disabled">Chart library didn't load — check your connection and refresh to see the trend line.</div>`;
+      wrap.innerHTML = `<div class="trend-disabled">Chart library didn't load — check your connection and refresh to see the comparison chart.</div>`;
       return;
     }
+
     const ctx = $('#trendCanvas').getContext('2d');
     if(state.trendChart) state.trendChart.destroy();
     const cc = chartColors();
     state.trendChart = new Chart(ctx, {
-      type:'line',
+      type:'pie',
       data:{
-        labels: summary.map(s=>fmtDate(s.date)),
-        datasets:[
-          {label:'Delivery success %', data:summary.map(s=>s.avgDeliverySuccess), borderColor:'#3F8F6D', backgroundColor:'transparent', tension:.25},
-          {label:'SLA achievement %', data:summary.map(s=>s.avgSLA), borderColor:'#E8A33D', backgroundColor:'transparent', tension:.25},
-          {label:'Attendance %', data:summary.map(s=>s.avgAttendance), borderColor:'#5B6472', backgroundColor:'transparent', tension:.25, borderDash:[4,3]},
-        ]
+        labels:['Top performers','Needs attention'],
+        datasets:[{
+          data:[topAvg, bottomAvg],
+          backgroundColor:['#3F8F6D','#C1503F'],
+          borderColor: cc.grid,
+          borderWidth: 1
+        }]
       },
       options:{
         responsive:true,
-        plugins:{legend:{position:'bottom',labels:{boxWidth:10,color:cc.text,font:{family:'IBM Plex Sans',size:11}}}},
-        scales:{
-          y:{beginAtZero:false,ticks:{color:cc.text,font:{size:10}},grid:{color:cc.grid}},
-          x:{ticks:{color:cc.text,font:{size:10}},grid:{color:cc.grid}}
+        plugins:{
+          legend:{position:'bottom',labels:{color:cc.text,font:{family:'IBM Plex Sans',size:11}}}
         }
       }
     });
@@ -549,13 +579,86 @@
 
   let pendingFile = null, pendingParsedRows = null;
 
+  function startOfWeek(date){
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff);
+    d.setHours(0,0,0,0);
+    return d;
+  }
+
+  function toISODate(date){
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  function formatWeekRange(startDate){
+    const end = new Date(startDate);
+    end.setDate(end.getDate() + 6);
+    return `${fmtDate(toISODate(startDate))} – ${fmtDate(toISODate(end))}`;
+  }
+
+  function renderWeekPicker(){
+    const input = $('#dateInput');
+    const monthLabel = $('#weekPickerMonthLabel');
+    const grid = $('#weekPickerGrid');
+    const selectionText = $('#weekSelectionText');
+    const selectedDate = state.weekPickerSelectedDate ? new Date(state.weekPickerSelectedDate + 'T00:00:00') : null;
+    const shownMonth = new Date(state.weekPickerMonth);
+    const year = shownMonth.getFullYear();
+    const month = shownMonth.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const firstColumn = (firstDay.getDay() + 6) % 7;
+    const totalDays = lastDay.getDate();
+
+    const cells = [];
+    for(let i=0;i<firstColumn;i++) cells.push('');
+    for(let d=1;d<=totalDays;d++) cells.push(d);
+    while(cells.length % 7 !== 0) cells.push('');
+
+    monthLabel.textContent = firstDay.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+    grid.innerHTML = '';
+    cells.forEach((day, index)=>{
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'week-picker-cell';
+      if(!day){ cell.classList.add('muted'); cell.disabled = true; }
+      else {
+        const date = new Date(year, month, day);
+        const monday = startOfWeek(date);
+        const isSelectedDate = selectedDate && selectedDate.getFullYear() === date.getFullYear() && selectedDate.getMonth() === date.getMonth() && selectedDate.getDate() === date.getDate();
+        if(isSelectedDate) cell.classList.add('selected');
+        cell.textContent = day;
+        cell.addEventListener('click', ()=>{
+          input.value = toISODate(monday);
+          state.weekPickerSelectedDate = toISODate(date);
+          state.weekPickerMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+          renderWeekPicker();
+        });
+      }
+      grid.appendChild(cell);
+    });
+
+    selectionText.textContent = input.value ? `Selected week: ${formatWeekRange(new Date(input.value + 'T00:00:00'))}` : 'Selected week: —';
+  }
+
   function openModal(){
     $('#overlay').classList.add('show');
     $('#modalMsg').textContent = '';
     $('#dropText').innerHTML = '<b>Click to choose</b> or drag a .csv file here';
     pendingFile = null; pendingParsedRows = null;
     $('#confirmUpload').disabled = true;
-    if(!$('#dateInput').value) $('#dateInput').valueAsDate = new Date();
+    const today = new Date();
+    const monday = startOfWeek(today);
+    if(!$('#dateInput').value){ $('#dateInput').value = toISODate(monday); }
+    state.weekPickerSelectedDate = state.weekPickerSelectedDate || toISODate(today);
+    state.weekPickerMonth = new Date(monday.getFullYear(), monday.getMonth(), 1);
+    renderWeekPicker();
     if(state.currentHub==='Bauko' || state.currentHub==='Buguias') $('#hubSelect').value = state.currentHub;
   }
   function closeModal(){ $('#overlay').classList.remove('show'); }
@@ -568,7 +671,14 @@
     $('#modalMsg').textContent = 'Reading file…';
     $('#modalMsg').className = 'modal-msg';
     const m = file.name.match(/(\d{4}-\d{2}-\d{2})/);
-    if(m) $('#dateInput').value = m[1];
+    if(m) {
+      const picked = new Date(m[1] + 'T00:00:00');
+      const monday = startOfWeek(picked);
+      $('#dateInput').value = toISODate(monday);
+      state.weekPickerSelectedDate = toISODate(picked);
+      state.weekPickerMonth = new Date(monday.getFullYear(), monday.getMonth(), 1);
+      renderWeekPicker();
+    }
 
     const reader = new FileReader();
     reader.onload = function(e){
@@ -607,7 +717,7 @@
     if(!pendingParsedRows) return;
     const hub = $('#hubSelect').value;
     const date = $('#dateInput').value;
-    if(!date){ $('#modalMsg').textContent='Pick a report date.'; $('#modalMsg').className='modal-msg err'; return; }
+    if(!date){ $('#modalMsg').textContent='Pick a week start date.'; $('#modalMsg').className='modal-msg err'; return; }
 
     const btn = $('#confirmUpload');
     btn.disabled = true;
@@ -632,7 +742,7 @@
       await saveSummaryArr(hub, summaryArr);
 
       closeModal();
-      showToast(`Added <b>${hub}</b> — ${fmtDate(date)} (${pendingParsedRows.length} riders)`);
+      showToast(`Added <b>${hub}</b> — week of ${fmtDate(date)} (${pendingParsedRows.length} riders)`);
 
       setActiveTab(hub);
       state.currentDate = date;
@@ -687,6 +797,14 @@
 
     $('#openUploadBtn').addEventListener('click', openModal);
     $('#cancelUpload').addEventListener('click', closeModal);
+    $('#weekPrevBtn').addEventListener('click', ()=>{
+      state.weekPickerMonth = new Date(state.weekPickerMonth.getFullYear(), state.weekPickerMonth.getMonth() - 1, 1);
+      renderWeekPicker();
+    });
+    $('#weekNextBtn').addEventListener('click', ()=>{
+      state.weekPickerMonth = new Date(state.weekPickerMonth.getFullYear(), state.weekPickerMonth.getMonth() + 1, 1);
+      renderWeekPicker();
+    });
     $('#overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') closeModal(); });
 
     $('#fileInput').addEventListener('change', e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); });
