@@ -207,6 +207,7 @@
     filterVehicle: '',
     filterGroup: '',
     filterGrade: '',
+    hideInactive: true,
     trendChart: null,
     weekPickerMonth: new Date(),
     weekPickerSelectedDate: null,
@@ -383,6 +384,7 @@
     html += `<div class="table-panel">
       <div class="table-controls">
         <input type="text" id="searchInput" placeholder="Search rider name or ID…">
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-dim);"><input type="checkbox" id="hideInactiveToggle" ${state.hideInactive ? 'checked' : ''}> Hide inactive riders</label>
         <select id="vehicleFilter"><option value="">All vehicle types</option></select>
         <select id="groupFilter"><option value="">All driver groups</option></select>
         <select id="gradeFilter"><option value="">All grades</option><option>A</option><option>B</option><option>C</option><option>D</option><option>Inactive</option></select>
@@ -493,17 +495,22 @@
 
   function setupTableControls(rows){
     const vSel = $('#vehicleFilter'), gSel = $('#groupFilter');
-    const vehicles = Array.from(new Set(rows.map(r=>r.vehicleType).filter(Boolean))).sort();
-    const groups = Array.from(new Set(rows.map(r=>r.driverGroup).filter(Boolean))).sort();
+    const visibleRows = state.hideInactive ? rows.filter(r=>Number(r.daysWorking||0)>0) : rows;
+    const vehicles = Array.from(new Set(visibleRows.map(r=>r.vehicleType).filter(Boolean))).sort();
+    const groups = Array.from(new Set(visibleRows.map(r=>r.driverGroup).filter(Boolean))).sort();
+    vSel.innerHTML = '<option value="">All vehicle types</option>';
+    gSel.innerHTML = '<option value="">All driver groups</option>';
     vehicles.forEach(v=>{ const o=document.createElement('option'); o.value=v;o.textContent=v; vSel.appendChild(o); });
     groups.forEach(g=>{ const o=document.createElement('option'); o.value=g;o.textContent=g; gSel.appendChild(o); });
     vSel.value = state.filterVehicle; gSel.value = state.filterGroup; $('#gradeFilter').value = state.filterGrade;
     $('#searchInput').value = state.search;
+    $('#hideInactiveToggle').checked = state.hideInactive;
 
     $('#searchInput').addEventListener('input', e=>{ state.search=e.target.value; renderTable(); });
     vSel.addEventListener('change', e=>{ state.filterVehicle=e.target.value; renderTable(); });
     gSel.addEventListener('change', e=>{ state.filterGroup=e.target.value; renderTable(); });
     $('#gradeFilter').addEventListener('change', e=>{ state.filterGrade=e.target.value; renderTable(); });
+    $('#hideInactiveToggle').addEventListener('change', e=>{ state.hideInactive=e.target.checked; renderTable(); });
 
     const thead = $('#theadRow');
     thead.innerHTML = COLUMNS.filter(c=>!c.showOnlyAll || state.currentHub==='All').map(c=>
@@ -521,6 +528,9 @@
 
   function renderTable(){
     let rows = state.rows.slice();
+    if(state.hideInactive){
+      rows = rows.filter(r=>Number(r.daysWorking||0) > 0);
+    }
     if(state.search){
       const q = state.search.toLowerCase();
       rows = rows.filter(r => r.name.toLowerCase().includes(q) || String(r.id).includes(q));
@@ -549,7 +559,8 @@
         return `<td>${escapeHtml(r[c.key])}</td>`;
       }).join('') + '</tr>';
     }).join('');
-    $('#rowCount').textContent = `Showing ${rows.length} of ${state.rows.length} riders`;
+    const totalBaseRows = state.hideInactive ? state.rows.filter(r=>Number(r.daysWorking||0) > 0).length : state.rows.length;
+    $('#rowCount').textContent = `Showing ${rows.length} of ${totalBaseRows} riders`;
     if(rows.length===0){
       tbody.innerHTML = `<tr><td colspan="${cols.length}" style="text-align:center;color:var(--text-dim);padding:24px;">No riders match these filters.</td></tr>`;
     }
