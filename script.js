@@ -359,7 +359,6 @@
     const kpis = [
       {label:'Riders on manifest', value: fmtNum(rows.length), sub:`${active.length} active`},
       {label:'Delivery success rate', value: fmtPct(avg('deliverySuccessRate')), cls: avg('deliverySuccessRate')>=90?'teal':(avg('deliverySuccessRate')<75?'brick':'' )},
-      {label:'SLA achievement', value: fmtPct(avg('slaAchievementRate')), cls: avg('slaAchievementRate')>=90?'teal':(avg('slaAchievementRate')<75?'brick':'' )},
       {label:'Attendance rate', value: fmtPct(avg('attendanceRate'))},
       {label:'Parcels delivered', value: fmtNum(sum('parcelsDelivered')), sub:`${fmtNum(sum('parcelsAssigned'))} assigned`},
       {label:'Parcels on hold', value: fmtNum(sum('parcelsOnHold')), cls: sum('parcelsOnHold')>0?'brick':''},
@@ -372,7 +371,7 @@
     html += '</div>';
 
     html += '<div class="panels">';
-    html += `<div class="panel"><h3>Performance comparison</h3><p class="hint">Top performers vs. needs attention</p><div id="trendWrap"></div></div>`;
+    html += `<div class="panel"><h3>Vehicle types</h3><p class="hint">Rider count by vehicle type</p><div id="trendWrap"></div></div>`;
     html += `<div class="panel"><h3>By driver group</h3><p class="hint">Avg. delivery success rate per group</p><canvas id="groupChart" height="180"></canvas></div>`;
     html += '</div>';
 
@@ -405,49 +404,28 @@
     const wrap = $('#trendWrap');
     const rows = state.rows || [];
     const active = rows.filter(r=>Number(r.daysWorking||0) > 0);
-    if(active.length < 2){
-      wrap.innerHTML = `<div class="trend-disabled">Upload a manifest with at least two active riders to compare performance.</div>`;
+    if(active.length < 1){
+      wrap.innerHTML = `<div class="trend-disabled">Upload a manifest with rider data to see vehicle type counts.</div>`;
       return;
     }
 
-    const top = active.slice().sort((a,b)=>b.deliverySuccessRate-a.deliverySuccessRate).slice(0,3);
-    const bottom = active.slice().sort((a,b)=>a.deliverySuccessRate-b.deliverySuccessRate).slice(0,3);
-    const topAvg = top.length ? top.reduce((a,r)=>a+r.deliverySuccessRate,0)/top.length : 0;
-    const bottomAvg = bottom.length ? bottom.reduce((a,r)=>a+r.deliverySuccessRate,0)/bottom.length : 0;
-
-    const hasValues = Number.isFinite(topAvg) && Number.isFinite(bottomAvg);
-    if(!hasValues || (topAvg === 0 && bottomAvg === 0)){
-      wrap.innerHTML = `<div class="trend-disabled">No performance values were found for the current manifest.</div>`;
-      return;
-    }
-
-    wrap.innerHTML = `<canvas id="trendCanvas" height="220"></canvas>`;
-    if(typeof Chart === 'undefined'){
-      wrap.innerHTML = `<div class="trend-disabled">Chart library didn't load — check your connection and refresh to see the comparison chart.</div>`;
-      return;
-    }
-
-    const ctx = $('#trendCanvas').getContext('2d');
-    if(state.trendChart) state.trendChart.destroy();
-    const cc = chartColors();
-    state.trendChart = new Chart(ctx, {
-      type:'pie',
-      data:{
-        labels:['Top performers','Needs attention'],
-        datasets:[{
-          data:[topAvg, bottomAvg],
-          backgroundColor:['#3F8F6D','#C1503F'],
-          borderColor: cc.grid,
-          borderWidth: 1
-        }]
-      },
-      options:{
-        responsive:true,
-        plugins:{
-          legend:{position:'bottom',labels:{color:cc.text,font:{family:'IBM Plex Sans',size:11}}}
-        }
-      }
+    const counts = {};
+    active.forEach(r=>{
+      const vehicle = String(r.vehicleType || 'Unspecified').trim() || 'Unspecified';
+      counts[vehicle] = (counts[vehicle] || 0) + 1;
     });
+
+    const entries = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+    if(entries.length < 1){
+      wrap.innerHTML = `<div class="trend-disabled">No vehicle type data was found for the current manifest.</div>`;
+      return;
+    }
+
+    wrap.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        ${entries.map(([vehicle, count]) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid var(--line-2);border-radius:5px;background:var(--hover);"><span>${escapeHtml(vehicle)}</span><b>${count}</b></div>`).join('')}
+      </div>
+    `;
   }
 
   let groupChartInstance = null;
