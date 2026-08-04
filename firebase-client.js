@@ -1,43 +1,44 @@
-// Firebase client helper
-// This file expects Firebase SDK scripts and firebase-config.js to be loaded first.
+// firebase-client.js
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-function getFirebaseApp() {
-  if (!window.firebase || typeof window.firebase.initializeApp !== 'function') {
-    throw new Error('Firebase SDK is not loaded. Ensure firebase-app.js and firebase-config.js are included.');
+const app = initializeApp(window.FIREBASE_CONFIG);
+const db = getFirestore(app);
+
+window.firebaseAPI = {
+  isEnabled: () => !!window.FIREBASE_CONFIG.apiKey,
+  
+  async set(key, value) {
+    // We store the JSON string inside a document field called 'content'
+    const docRef = doc(db, "dispatch_data", key.replace(/:/g, '_')); 
+    await setDoc(docRef, { content: value, updated: new Date().toISOString() });
+    return { key, value };
+  },
+
+  async get(key) {
+    const docRef = doc(db, "dispatch_data", key.replace(/:/g, '_'));
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      return { key, value: docSnap.data().content };
+    }
+    return null;
+  },
+
+  async delete(key) {
+    const docRef = doc(db, "dispatch_data", key.replace(/:/g, '_'));
+    await deleteDoc(docRef);
+    return { key, deleted: true };
+  },
+
+  async list(prefix = '') {
+    const querySnapshot = await getDocs(collection(db, "dispatch_data"));
+    const keys = [];
+    querySnapshot.forEach((doc) => {
+      const originalKey = doc.id.replace(/_/g, ':');
+      if (!prefix || originalKey.startsWith(prefix)) {
+        keys.push(originalKey);
+      }
+    });
+    return { keys };
   }
-
-  if (window.firebase.apps && window.firebase.apps.length > 0) {
-    return window.firebase.app();
-  }
-
-  return window.initFirebaseApp ? window.initFirebaseApp() : window.firebase.initializeApp(window.FIREBASE_CONFIG);
-}
-
-function getFirestore() {
-  const app = getFirebaseApp();
-  if (!window.firebase.firestore) {
-    throw new Error('Firebase Firestore SDK is not loaded. Include firebase-firestore.js.');
-  }
-  return window.firebase.firestore(app);
-}
-
-function getAuth() {
-  const app = getFirebaseApp();
-  if (!window.firebase.auth) {
-    throw new Error('Firebase Auth SDK is not loaded. Include firebase-auth.js.');
-  }
-  return window.firebase.auth(app);
-}
-
-function getStorage() {
-  const app = getFirebaseApp();
-  if (!window.firebase.storage) {
-    throw new Error('Firebase Storage SDK is not loaded. Include firebase-storage.js.');
-  }
-  return window.firebase.storage(app);
-}
-
-window.getFirebaseApp = getFirebaseApp;
-window.getFirestore = getFirestore;
-window.getAuth = getAuth;
-window.getStorage = getStorage;
+};

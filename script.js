@@ -1,18 +1,13 @@
 (function(){
   "use strict";
 
-  const hasSupabaseConfig = !!(window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.url && window.SUPABASE_CONFIG.key);
-  const SUPABASE_URL = (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.url) || "YOUR_SUPABASE_PROJECT_URL";
-  const SUPABASE_KEY = (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.key) || "YOUR_SUPABASE_ANON_KEY";
-
-  const supabase = hasSupabaseConfig && window.supabase && typeof window.supabase.createClient === 'function'
-    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
-    : null;
+  const hasFirebaseConfig = !!(window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.apiKey);
 
   /* ---------------- Field mapping ---------------- */
   const FIELD_MAP = [
     ['driver','driverRaw','raw'],
     ['vehicle type','vehicleType','raw'],
+    ['area','area','raw'],
     ['contract type','contractType','raw'],
     ['driver group','driverGroup','raw'],
     ['grade','csvGrade','raw'],
@@ -118,64 +113,30 @@
   /* ---------------- Storage helpers ---------------- */
   const HUBS = ['Bauko','Buguias'];
 
-  const hasRealStorage = (typeof window.storage !== 'undefined') && window.storage
-    && typeof window.storage.get === 'function' && typeof window.storage.set === 'function';
-  const hasSharedStorage = hasRealStorage || (window.firebaseAPI && window.firebaseAPI.isEnabled());
+  const hasFirebaseStorage = !!(window.firebaseAPI && window.firebaseAPI.isEnabled && window.firebaseAPI.isEnabled());
 
-    const storage = {
-      async get(key){
-        try{
-          if(hasRealStorage) return await window.storage.get(key, false);
-        }catch(e){}
-        try{
-          if(window.firebaseAPI && window.firebaseAPI.isEnabled && window.firebaseAPI.isEnabled()){
-            return await window.firebaseAPI.get(key);
-          }
-        }catch(e){}
-        const value = localStorage.getItem(key);
-        return value===null ? null : {key, value};
-      },
-      async set(key,value){
-        try{
-          if(hasRealStorage) return await window.storage.set(key,value, false);
-        }catch(e){}
-        try{
-          if(window.firebaseAPI && window.firebaseAPI.isEnabled && window.firebaseAPI.isEnabled()){
-            return await window.firebaseAPI.set(key, value);
-          }
-        }catch(e){}
-        localStorage.setItem(key,value);
-        return {key,value};
-      },
-      async delete(key){
-        try{
-          if(hasRealStorage) return await window.storage.delete(key, false);
-        }catch(e){}
-        try{
-          if(window.firebaseAPI && window.firebaseAPI.isEnabled && window.firebaseAPI.isEnabled()){
-            return await window.firebaseAPI.delete(key);
-          }
-        }catch(e){}
-        localStorage.removeItem(key);
-        return {key, deleted:true};
-      },
-      async list(prefix=''){
-        try{
-          if(hasRealStorage) return await window.storage.list(prefix, false);
-        }catch(e){}
-        try{
-          if(window.firebaseAPI && window.firebaseAPI.isEnabled && window.firebaseAPI.isEnabled()){
-            return await window.firebaseAPI.list(prefix);
-          }
-        }catch(e){}
-        const keys=[];
-        for(let i=0;i<localStorage.length;i++){
-          const k=localStorage.key(i);
-          if(!prefix || k.startsWith(prefix)) keys.push(k);
-        }
-        return {keys};
-      },
-    };
+  const storage = {
+    async get(key){
+      if(!hasFirebaseStorage) return null;
+      try{ return await window.firebaseAPI.get(key); }
+      catch(e){ return null; }
+    },
+    async set(key,value){
+      if(!hasFirebaseStorage) return null;
+      try{ return await window.firebaseAPI.set(key, value); }
+      catch(e){ return null; }
+    },
+    async delete(key){
+      if(!hasFirebaseStorage) return null;
+      try{ return await window.firebaseAPI.delete(key); }
+      catch(e){ return null; }
+    },
+    async list(prefix=''){
+      if(!hasFirebaseStorage) return {keys:[]};
+      try{ return await window.firebaseAPI.list(prefix); }
+      catch(e){ return {keys:[]}; }
+    },
+  };
 
   async function getIndex(){
     try{ const r = await storage.get('hubs-index', false); return r? JSON.parse(r.value) : {Bauko:[],Buguias:[]}; }
@@ -262,9 +223,9 @@
   }
 
   async function init(){
-    if(!hasSharedStorage){
+    if(!hasFirebaseStorage){
       $('#storageBanner').innerHTML = `<div class="banner">
-        <span>Running as a standalone dashboard. Uploaded manifests are now saved in your browser using localStorage and persist after refreshes.</span>
+        <span>Firebase is not configured yet. Please add your Firebase config before uploading manifests.</span>
         <button id="dismissBanner">Dismiss</button>
       </div>`;
       const db = document.getElementById('dismissBanner');
@@ -511,6 +472,7 @@
     {key:'name', label:'Rider', type:'name'},
     {key:'hub', label:'Hub', type:'text', showOnlyAll:true},
     {key:'vehicleType', label:'Vehicle', type:'text'},
+    {key:'area', label:'Area', type:'text'},
     {key:'driverGroup', label:'Group', type:'text'},
     {key:'attendDays', label:'Days', type:'num'},
     {key:'avgParcelsPerDay', label:'Parcels/Day', type:'num1'},
