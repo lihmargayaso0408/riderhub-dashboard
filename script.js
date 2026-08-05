@@ -184,8 +184,10 @@
   async function saveTheme(mode){ try{ await storage.set('ui-theme', JSON.stringify(mode), false); }catch(e){} }
   function applyTheme(mode){
     document.body.classList.toggle('dark', mode==='dark');
-    $('#themeIconSun').style.display = mode==='dark' ? 'none' : '';
-    $('#themeIconMoon').style.display = mode==='dark' ? '' : 'none';
+    const themeState = $('#themeToggleState');
+    if(themeState){ themeState.textContent = mode==='dark' ? 'On' : 'Off'; }
+    const settingsToggle = $('#settingsToggle');
+    if(settingsToggle){ settingsToggle.setAttribute('aria-label', mode==='dark' ? 'Open options (dark mode)' : 'Open options'); }
   }
   function chartColors(){
     const cs = getComputedStyle(document.body);
@@ -753,6 +755,48 @@
     t._timer = setTimeout(()=>t.classList.remove('show'), 3200);
   }
 
+  async function deleteSelectedDate(){
+    if(!state.currentDate){
+      showToast('Select a date to delete.');
+      return;
+    }
+
+    const targetDate = state.currentDate;
+    const hubsToDelete = state.currentHub === 'All'
+      ? HUBS.filter(hub => (state.hubIndex[hub]||[]).includes(targetDate))
+      : [state.currentHub];
+
+    if(hubsToDelete.length === 0){
+      showToast('That date is not stored for the current view.');
+      return;
+    }
+
+    const summaryText = hubsToDelete.length > 1
+      ? `Delete the manifest for ${fmtDate(targetDate)} from ${hubsToDelete.join(' and ')}?`
+      : `Delete the manifest for ${fmtDate(targetDate)} from ${hubsToDelete[0]}?`;
+
+    if(!confirm(`${summaryText} This cannot be undone.`)) return;
+
+    try{
+      for(const hub of hubsToDelete){
+        await storage.delete(`snapshot:${hub}:${targetDate}`, false);
+
+        const nextSummary = (state.summaries[hub]||[]).filter(item => item.date !== targetDate);
+        state.summaries[hub] = nextSummary;
+        await saveSummaryArr(hub, nextSummary);
+
+        state.hubIndex[hub] = (state.hubIndex[hub]||[]).filter(date => date !== targetDate);
+      }
+
+      await saveIndex(state.hubIndex);
+      state.currentDate = null;
+      await refreshView();
+      showToast('Selected manifest date removed.');
+    }catch(err){
+      showToast('Could not delete that manifest date.');
+    }
+  }
+
   async function resetAll(){
     if(!confirm('Clear all stored manifests for both hubs? This cannot be undone.')) return;
     for(const hub of HUBS){
@@ -770,6 +814,11 @@
     showToast('All stored data cleared.');
   }
 
+  function closeSettingsMenu(){
+    const menu = $('#settingsMenu');
+    if(menu) menu.parentElement.classList.remove('open');
+  }
+
   function wireStaticEvents(){
     $$('.route-stop').forEach(el=>{
       el.addEventListener('click', async ()=>{
@@ -784,7 +833,26 @@
       await refreshView();
     });
 
-    $('#openUploadBtn').addEventListener('click', openModal);
+    $('#settingsToggle').addEventListener('click', e=>{
+      e.stopPropagation();
+      $('#settingsMenu').parentElement.classList.toggle('open');
+    });
+    document.addEventListener('click', e=>{
+      if(!e.target.closest('.settings-menu')) closeSettingsMenu();
+    });
+
+    $('#openUploadBtn').addEventListener('click', ()=>{
+      closeSettingsMenu();
+      openModal();
+    });
+    $('#deleteDateMenuBtn').addEventListener('click', ()=>{
+      closeSettingsMenu();
+      deleteSelectedDate();
+    });
+    $('#openRidersPageBtn').addEventListener('click', ()=>{
+      closeSettingsMenu();
+      window.open('riders-agency.html', '_blank', 'noopener,noreferrer');
+    });
     $('#cancelUpload').addEventListener('click', closeModal);
     $('#weekPrevBtn').addEventListener('click', ()=>{
       state.weekPickerMonth = new Date(state.weekPickerMonth.getFullYear(), state.weekPickerMonth.getMonth() - 1, 1);
@@ -807,6 +875,7 @@
     $('#resetBtn').addEventListener('click', resetAll);
 
     $('#themeToggle').addEventListener('click', async ()=>{
+      closeSettingsMenu();
       const next = document.body.classList.contains('dark') ? 'light' : 'dark';
       applyTheme(next);
       await saveTheme(next);

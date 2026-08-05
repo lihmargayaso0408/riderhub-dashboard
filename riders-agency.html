@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Riders & Agency per Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body{padding:0;margin:0;}
+    .page-shell{max-width:1280px;margin:0 auto;padding:28px;}
+    .page-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;}
+    .page-head h1{font-family:'Space Grotesk',sans-serif;font-size:24px;margin:0;}
+    .page-head p{margin:4px 0 0;color:var(--text-dim);font-size:13px;}
+    .status-box{background:var(--card);border:1px solid var(--line-2);border-radius:6px;padding:12px 14px;font-size:13px;color:var(--text-dim);}
+    .page-actions{display:flex;align-items:center;gap:10px;}
+    .theme-toggle{border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 12px;border-radius:999px;cursor:pointer;font-size:13px;transition:background .15s ease,border-color .15s ease,color .15s ease;}
+    .theme-toggle:hover{background:var(--hover);}
+    .tabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+    .tab-btn{border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 12px;border-radius:999px;cursor:pointer;font-size:13px;}
+    .tab-btn.active{background:var(--ink);color:#fff;border-color:var(--ink);} 
+    .table-card{background:var(--card);border:1px solid var(--line-2);border-radius:8px;padding:16px;overflow:auto;}
+    table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px;}
+    th, td{padding:10px 12px;border-bottom:1px solid var(--line-2);text-align:left;white-space:nowrap;}
+    th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);}
+    .muted{color:var(--text-dim);}
+    .error{color:var(--brick);}
+    .status-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;}
+    .status-active{background:rgba(52,211,153,.14);color:#22c55e;}
+    .status-suspended{background:rgba(239,68,68,.12);color:#ef4444;}
+  </style>
+</head>
+<body>
+  <div class="page-shell">
+    <div class="page-head">
+      <div>
+        <h1>Riders &amp; Agency per Hub</h1>
+        <p>Data is loaded from your Google Sheet and split by hub.</p>
+      </div>
+      <div class="page-actions">
+        <button class="theme-toggle" id="themeToggle" type="button">Dark mode</button>
+        <div class="status-box" id="sheetStatus">Loading sheet…</div>
+      </div>
+    </div>
+    <div class="tabs" id="hubTabs">
+      <button class="tab-btn active" data-hub="Buguias" type="button">Buguias</button>
+      <button class="tab-btn" data-hub="Bauko" type="button">Bauko</button>
+    </div>
+    <div class="table-card">
+      <table>
+        <thead>
+          <tr>
+            <th>Rider Name</th>
+            <th>Area</th>
+            <th>Contact #</th>
+            <th>Account ID</th>
+            <th>Agency</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="sheetRows"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const SHEET_ID = '1aGJXuO3tz5oLJyL6piEljz4A6cg6l0cnKvmtIpLkqMI';
+    const HUB_SHEET_NAME = {
+      Buguias: 'Buguias',
+      Bauko: 'Bauko'
+    };
+    const statusEl = document.getElementById('sheetStatus');
+    const rowsEl = document.getElementById('sheetRows');
+    const themeToggleEl = document.getElementById('themeToggle');
+    const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
+    let allRows = [];
+    let currentHub = 'Buguias';
+    let hasHubColumn = false;
+
+    async function loadSheet() {
+      try {
+        const sheetName = HUB_SHEET_NAME[currentHub] || HUB_SHEET_NAME.Buguias;
+        const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
+        const response = await fetch(SHEET_URL);
+        if (!response.ok) throw new Error('Unable to fetch sheet');
+        const text = await response.text();
+        const rawLines = text.split(/\r\n|\n|\r/);
+        if (rawLines.length < 2) {
+          throw new Error('No rows found in sheet');
+        }
+
+        const parsedLines = rawLines.map(line => parseCsvLine(line));
+        const headerRowIndex = parsedLines.findIndex(values => {
+          const normalized = values.map(v => String(v || '').trim().toLowerCase());
+          return normalized.some(h => ['rider name','rider','driver name','driver','name'].includes(h))
+              && normalized.some(h => ['area','location'].includes(h));
+        });
+        if (headerRowIndex < 0) throw new Error('Header row not found in sheet');
+
+        const headers = parsedLines[headerRowIndex];
+        const expectedColumns = headers.length;
+        const normalizedHeaders = headers.map(h => String(h || '').trim().toLowerCase());
+
+        function isHeaderRow(values) {
+          const normalized = values.map(v => String(v || '').trim().toLowerCase());
+          return normalizedHeaders.every((header, idx) => normalized[idx] === header || normalized[idx] === '');
+        }
+
+        const dataRows = parsedLines.slice(headerRowIndex + 1)
+          .filter(row => row.some(cell => String(cell || '').trim() !== ''))
+          .filter(row => !isHeaderRow(row))
+          .map(row => row.concat(Array(Math.max(0, expectedColumns - row.length)).fill('')));
+
+        const index = {
+          riderName: findHeaderIndex(normalizedHeaders, ['rider name','rider','driver name','driver','name']),
+          area: findHeaderIndex(normalizedHeaders, ['area','location']),
+          contact: findHeaderIndex(normalizedHeaders, ['contact #','contact','contact number','phone','contact number #','mobile']),
+          accountId: findHeaderIndex(normalizedHeaders, ['account id','accountid','account','acct id']),
+          agency: findHeaderIndex(normalizedHeaders, ['agency','agencies']),
+          status: findHeaderIndex(normalizedHeaders, ['status','state']),
+          hub: findHeaderIndex(normalizedHeaders, ['hub','hubs','branch','branch name'])
+        };
+        hasHubColumn = index.hub >= 0;
+
+        allRows = dataRows.map(values => ({
+          riderName: getCell(values, index.riderName),
+          area: getCell(values, index.area),
+          contact: getCell(values, index.contact),
+          accountId: getCell(values, index.accountId),
+          agency: getCell(values, index.agency),
+          status: getCell(values, index.status),
+          hub: hasHubColumn ? getCell(values, index.hub) : ''
+        })).filter(row => row.riderName || row.area || row.accountId || row.agency || row.status || row.hub);
+
+        renderRows();
+        statusEl.textContent = `Loaded ${allRows.length} rider records`;
+      } catch (err) {
+        console.error(err);
+        statusEl.innerHTML = '<span class="error">Could not load the Google Sheet. Check the published link and try again.</span>';
+        rowsEl.innerHTML = '<tr><td colspan="6" class="error">No data available.</td></tr>';
+      }
+    }
+
+    function parseCsvText(text) {
+      const rows = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (ch === '"') {
+          if (inQuotes && text[i + 1] === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (ch === '\r') {
+          if (inQuotes) {
+            current += ch;
+          } else {
+            if (text[i + 1] === '\n') {
+              i++;
+            }
+            rows.push(current);
+            current = '';
+          }
+        } else if (ch === '\n') {
+          if (inQuotes) {
+            current += ch;
+          } else {
+            rows.push(current);
+            current = '';
+          }
+        } else {
+          current += ch;
+        }
+      }
+      if (current !== '' || text.endsWith('\n') || text.endsWith('\r')) {
+        rows.push(current);
+      }
+      return rows.filter(line => line.trim() !== '').map(line => parseCsvLine(line));
+    }
+
+    function parseCsvLine(line) {
+      const values = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (ch === ',' && !inQuotes) {
+          values.push(current);
+          current = '';
+        } else {
+          current += ch;
+        }
+      }
+      values.push(current);
+      return values;
+    }
+
+    function getCell(values, index) {
+      return index >= 0 && values[index] !== undefined ? values[index].trim() : '';
+    }
+
+    function findHeaderIndex(headers, candidates) {
+      for (const candidate of candidates) {
+        const index = headers.findIndex(h => h === candidate || h.includes(candidate));
+        if (index >= 0) return index;
+      }
+      return -1;
+    }
+
+    function getFilteredRows() {
+      if (!hasHubColumn) return allRows;
+      const target = currentHub.toLowerCase();
+      return allRows.filter(row => {
+        const hubValue = String(row.hub || '').toLowerCase();
+        return hubValue.includes(target) || hubValue === target;
+      });
+    }
+
+    function renderRows() {
+      const rows = getFilteredRows();
+      if (!rows.length) {
+        rowsEl.innerHTML = '<tr><td colspan="6" class="muted">No rider records found for this hub.</td></tr>';
+        return;
+      }
+      rowsEl.innerHTML = rows.map(r => {
+        const statusValue = escapeHtml(r.status || '');
+        const statusClass = getStatusClass(statusValue);
+        return `
+          <tr>
+            <td>${escapeHtml(r.riderName)}</td>
+            <td>${escapeHtml(r.area)}</td>
+            <td>${escapeHtml(r.contact)}</td>
+            <td>${escapeHtml(r.accountId)}</td>
+            <td>${escapeHtml(r.agency)}</td>
+            <td><span class="status-chip ${statusClass}">${statusValue}</span></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function getStatusClass(status) {
+      const normalized = String(status || '').trim().toLowerCase();
+      if (normalized === 'active') return 'status-active';
+      if (normalized === 'suspended') return 'status-suspended';
+      return '';
+    }
+
+    function escapeHtml(value) {
+      return String(value || '').replace(/[&<>"']/g, match => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[match]));
+    }
+
+    function getSavedTheme() {
+      try {
+        return localStorage.getItem('ridersAgencyTheme');
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function setTheme(theme) {
+      const isDark = theme === 'dark';
+      document.body.classList.toggle('dark', isDark);
+      themeToggleEl.textContent = isDark ? 'Light mode' : 'Dark mode';
+      try {
+        localStorage.setItem('ridersAgencyTheme', theme);
+      } catch (err) {
+        // ignore storage errors
+      }
+    }
+
+    themeToggleEl.addEventListener('click', () => {
+      const nextTheme = document.body.classList.contains('dark') ? 'light' : 'dark';
+      setTheme(nextTheme);
+    });
+
+    const savedTheme = getSavedTheme();
+    setTheme(savedTheme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+
+    tabButtons.forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (btn.dataset.hub === currentHub) return;
+        currentHub = btn.dataset.hub;
+        tabButtons.forEach(b => b.classList.toggle('active', b === btn));
+        statusEl.textContent = 'Loading sheet…';
+        rowsEl.innerHTML = '<tr><td colspan="6" class="muted">Loading...</td></tr>';
+        await loadSheet();
+      });
+    });
+
+    loadSheet();
+  </script>
+</body>
+</html>
