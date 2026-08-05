@@ -156,8 +156,11 @@
       return isNaN(n) ? 0 : n;
     }
 
-function fmtMoney(n) {
-      return '₱' + Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const USD_TO_PHP = 56.0; // Exchange rate: 1 USD = ₱56 (adjust as needed)
+
+    function fmtMoney(usd) {
+      const peso = (Number(usd) || 0) * USD_TO_PHP;
+      return '₱' + peso.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
     async function loadSheet() {
