@@ -32,8 +32,10 @@
     .stat-value.teal{color:var(--teal);}
     .stat-value.brick{color:var(--brick);}
     .stat-value.amber{color:var(--amber-deep);}
-    .search-row{margin-bottom:12px;}
+.search-row{margin-bottom:12px;}
+    .search-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
     .search-row input{width:100%;max-width:340px;padding:9px 12px;border:1px solid var(--line);border-radius:3px;font-family:'IBM Plex Sans';font-size:13px;background:var(--card);color:var(--text);}
+    .month-filter{border:1px solid var(--line);background:var(--card);color:var(--text);padding:9px 12px;border-radius:3px;font-size:13px;font-family:'IBM Plex Sans';cursor:pointer;max-width:180px;}
     .table-card{background:var(--card);border:1px solid var(--line-2);border-radius:8px;padding:16px;overflow:auto;}
     table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:1400px;}
     th, td{padding:9px 11px;border-bottom:1px solid var(--line-2);text-align:left;white-space:nowrap;}
@@ -74,8 +76,11 @@
       <button class="tab-btn" data-hub="Bauko" type="button">Bauko</button>
     </div>
     <div class="stats-row" id="statsRow"></div>
-    <div class="search-row">
+<div class="search-row">
       <input type="text" id="searchInput" placeholder="Search report date, loss party, status, sample, area cluster…">
+      <select id="monthFilter" class="month-filter" title="Filter by month">
+        <option value="">All months</option>
+      </select>
     </div>
     <div class="table-card">
       <table>
@@ -107,7 +112,8 @@
     const statusEl = document.getElementById('sheetStatus');
     const rowsEl = document.getElementById('lossRows');
     const statsRowEl = document.getElementById('statsRow');
-    const searchEl = document.getElementById('searchInput');
+const searchEl = document.getElementById('searchInput');
+    const monthFilterEl = document.getElementById('monthFilter');
     const themeToggleEl = document.getElementById('themeToggle');
     const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
     const sortableHeaders = Array.from(document.querySelectorAll('th[data-sort]'));
@@ -115,8 +121,42 @@
     let allRows = [];
     let currentHub = 'Buguias';
     let search = '';
+    let selectedMonth = '';
     let sortKey = 'report_date';
     let sortDir = 'desc';
+
+    const MONTH_NAMES = [
+      'January','February','March','April','May','June',
+      'July','August','September','October','November','December'
+    ];
+
+    function getMonthKey(dateStr) {
+      if (!dateStr) return '';
+      const m = String(dateStr).match(/(\d{4})-(\d{2})/);
+      if (m) return m[1] + '-' + m[2];
+      const d = new Date(dateStr);
+      if (isNaN(d)) return '';
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    }
+
+    function populateMonthFilter() {
+      const months = new Set();
+      allRows.forEach(r => {
+        const key = getMonthKey(r.report_date);
+        if (key) months.add(key);
+      });
+      const sorted = Array.from(months).sort().reverse();
+      monthFilterEl.innerHTML = '<option value="">All months</option>';
+      sorted.forEach(key => {
+        const opt = document.createElement('option');
+        opt.value = key;
+        const [year, mon] = key.split('-');
+        opt.textContent = MONTH_NAMES[Number(mon) - 1] + ' ' + year;
+        monthFilterEl.appendChild(opt);
+      });
+      if (selectedMonth && sorted.includes(selectedMonth)) monthFilterEl.value = selectedMonth;
+      else selectedMonth = '';
+    }
 
     function parseCsvLine(line) {
       const values = [];
@@ -226,6 +266,7 @@ const USD_TO_PHP = 56.0; // Exchange rate: 1 USD = ₱56 (adjust as needed)
           Mother_hub_for_MB: getCell(values, index.Mother_hub_for_MB)
         })).filter(row => row.report_date || row.loss_party || row.sample || row.num_loss || row.total_cogs_usd);
 
+populateMonthFilter();
         renderStats();
         renderRows();
         statusEl.textContent = `Loaded ${allRows.length} loss records`;
@@ -237,8 +278,9 @@ const USD_TO_PHP = 56.0; // Exchange rate: 1 USD = ₱56 (adjust as needed)
       }
     }
 
-    function getFilteredRows() {
-      return allRows;
+function getFilteredRows() {
+      if (!selectedMonth) return allRows;
+      return allRows.filter(r => getMonthKey(r.report_date) === selectedMonth);
     }
 
     function applySorting(rows) {
@@ -344,7 +386,13 @@ const USD_TO_PHP = 56.0; // Exchange rate: 1 USD = ₱56 (adjust as needed)
     const savedTheme = getSavedTheme();
     setTheme(savedTheme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
 
-    searchEl.addEventListener('input', e => { search = e.target.value; renderRows(); });
+searchEl.addEventListener('input', e => { search = e.target.value; renderRows(); });
+
+    monthFilterEl.addEventListener('change', e => {
+      selectedMonth = e.target.value;
+      renderStats();
+      renderRows();
+    });
 
     sortableHeaders.forEach(th => {
       th.addEventListener('click', () => {
