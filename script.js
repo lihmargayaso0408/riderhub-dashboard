@@ -508,8 +508,7 @@ html += '<div class="strip">';
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-dim);"><input type="checkbox" id="hideInactiveToggle" ${state.hideInactive ? 'checked' : ''}> Hide inactive riders</label>
         <select id="vehicleFilter"><option value="">All vehicle types</option></select>
         <select id="groupFilter"><option value="">All driver groups</option></select>
-        <select id="gradeFilter"><option value="">All grades</option><option>A</option><option>B</option><option>C</option><option>D</option><option>Inactive</option></select>
-      </div>
+</div>
       <div class="table-scroll"><table><thead><tr id="theadRow"></tr></thead><tbody id="tbody"></tbody></table></div>
       <div class="row-count" id="rowCount"></div>
     </div>`;
@@ -613,13 +612,12 @@ let groupChartInstance = null;
     {key:'vehicleType', label:'Vehicle', type:'text'},
     {key:'area', label:'Area', type:'text'},
     {key:'driverGroup', label:'Group', type:'text'},
-    {key:'attendDays', label:'Days', type:'num'},
-    {key:'avgParcelsPerDay', label:'Parcels/Day', type:'num1'},
-    {key:'deliverySuccessRate', label:'Delivery Success', type:'pct'},
-    {key:'slaAchievementRate', label:'SLA', type:'pct'},
-    {key:'attendanceRate', label:'Attendance', type:'pct'},
+{key:'attendDays', label:'Days', type:'num'},
+{key:'avgParcelsPerDay', label:'Parcels/Day', type:'num1'},
+    {key:'parcelsAssigned', label:'Parcels Assigned', type:'num'},
     {key:'parcelsOnHold', label:'On-hold', type:'num'},
-    {key:'grade', label:'Grade', type:'grade'},
+    {key:'deliverySuccessRate', label:'Delivery Success', type:'pct'},
+    {key:'attendanceRate', label:'Attendance', type:'pct'},
   ];
 
   function setupTableControls(rows){
@@ -631,14 +629,13 @@ let groupChartInstance = null;
     gSel.innerHTML = '<option value="">All driver groups</option>';
     vehicles.forEach(v=>{ const o=document.createElement('option'); o.value=v;o.textContent=v; vSel.appendChild(o); });
     groups.forEach(g=>{ const o=document.createElement('option'); o.value=g;o.textContent=g; gSel.appendChild(o); });
-    vSel.value = state.filterVehicle; gSel.value = state.filterGroup; $('#gradeFilter').value = state.filterGrade;
+vSel.value = state.filterVehicle; gSel.value = state.filterGroup;
     $('#searchInput').value = state.search;
     $('#hideInactiveToggle').checked = state.hideInactive;
 
     $('#searchInput').addEventListener('input', e=>{ state.search=e.target.value; renderTable(); });
     vSel.addEventListener('change', e=>{ state.filterVehicle=e.target.value; renderTable(); });
-    gSel.addEventListener('change', e=>{ state.filterGroup=e.target.value; renderTable(); });
-    $('#gradeFilter').addEventListener('change', e=>{ state.filterGrade=e.target.value; renderTable(); });
+gSel.addEventListener('change', e=>{ state.filterGroup=e.target.value; renderTable(); });
     $('#hideInactiveToggle').addEventListener('change', e=>{ state.hideInactive=e.target.checked; renderTable(); });
 
     const thead = $('#theadRow');
@@ -655,6 +652,16 @@ let groupChartInstance = null;
     });
   }
 
+// Color class for Delivery Success Rate based on thresholds
+  function successRateColor(v){
+    const n = Number(v) || 0;
+    if(n >= 90) return 'rate-green';
+    if(n >= 80) return 'rate-yellow';
+    if(n >= 70) return 'rate-orange';
+    if(n >= 60) return 'rate-bright-red';
+    return 'rate-dark-red';
+  }
+
   function renderTable(){
     let rows = state.rows.slice();
     if(state.hideInactive){
@@ -664,9 +671,8 @@ let groupChartInstance = null;
       const q = state.search.toLowerCase();
       rows = rows.filter(r => r.name.toLowerCase().includes(q) || String(r.id).includes(q));
     }
-    if(state.filterVehicle) rows = rows.filter(r=>r.vehicleType===state.filterVehicle);
-    if(state.filterGroup) rows = rows.filter(r=>r.driverGroup===state.filterGroup);
-    if(state.filterGrade) rows = rows.filter(r=>r.grade===state.filterGrade);
+if(state.filterVehicle) rows = rows.filter(r=>r.vehicleType===state.filterVehicle);
+if(state.filterGroup) rows = rows.filter(r=>r.driverGroup===state.filterGroup);
 
     rows.sort((a,b)=>{
       let av=a[state.sortKey], bv=b[state.sortKey];
@@ -676,13 +682,12 @@ let groupChartInstance = null;
       return 0;
     });
 
-    const cols = COLUMNS.filter(c=>!c.showOnlyAll || state.currentHub==='All');
+const cols = COLUMNS.filter(c=>!c.showOnlyAll || state.currentHub==='All');
     const tbody = $('#tbody');
     tbody.innerHTML = rows.map(r=>{
       return '<tr>' + cols.map(c=>{
-        if(c.type==='name') return `<td class="name-cell"><b>${escapeHtml(r.name)}</b>${r.id?`<span>#${r.id}</span>`:''}</td>`;
-        if(c.type==='grade') return `<td><span class="badge" style="background:${GRADE_COLOR[r.grade]}">${r.grade}</span></td>`;
-        if(c.type==='pct') return `<td class="num">${fmtPct(r[c.key])}</td>`;
+if(c.type==='name') return `<td class="name-cell"><b>${escapeHtml(r.name)}</b>${r.id?`<span>#${r.id}</span>`:''}</td>`;
+if(c.type==='pct') return `<td class="num ${(c.key==='deliverySuccessRate' || c.key==='attendanceRate') ? successRateColor(r[c.key]) : ''}">${fmtPct(r[c.key])}</td>`;
         if(c.type==='num1') return `<td class="num">${(r[c.key]||0).toFixed(1)}</td>`;
         if(c.type==='num') return `<td class="num">${fmtNum(r[c.key])}</td>`;
         return `<td>${escapeHtml(r[c.key])}</td>`;
