@@ -427,7 +427,9 @@ td.name-cell span{font-size:11px;color:var(--text-dim);font-family:'IBM Plex Mon
   transition:transform .15s ease, background .2s ease, border-color .2s ease, box-shadow .2s ease;
 }
 .week-picker-cell:hover:not(.muted){transform:scale(1.12);border-color:var(--amber);background:var(--hover);}
-.week-picker-cell.muted{opacity:.45;}
+.week-picker-cell.muted{opacity:.35;}
+.week-picker-cell.monday{font-weight:600;border-color:var(--amber);color:var(--amber-deep);}
+.week-picker-cell.monday:hover{border-color:var(--amber);background:rgba(232,163,61,.12);}
 .week-picker-cell.selected{background:var(--amber);color:var(--ink);border-color:var(--amber);font-weight:700;animation:popIn .3s cubic-bezier(.22,.61,.36,1) both;}
 .week-picker-selection{font-size:12px;color:var(--text-dim);margin-top:8px;}
 

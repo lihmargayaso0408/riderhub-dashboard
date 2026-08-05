@@ -329,13 +329,11 @@
     return Math.floor(diffDays / 7) + 1;
   }
 
-  function fmtWeekLabel(d){
+function fmtWeekLabel(d){
     if(!d) return '—';
     const dt = new Date(d+'T00:00:00');
     if(isNaN(dt)) return d;
-    const month = dt.toLocaleDateString('en-US',{month:'short'});
-    const week = weekNumberSinceJanuary(d);
-    return `${month} week ${week} ${dt.getFullYear()}`;
+    return dt.toLocaleDateString('en-US',{month:'short', day:'numeric', year:'numeric'});
   }
 
   async function init(){
@@ -742,31 +740,31 @@ function animateCountUp(el, target, isPct){
     const firstColumn = (firstDay.getDay() + 6) % 7;
     const totalDays = lastDay.getDate();
 
-    const cells = [];
+const cells = [];
     for(let i=0;i<firstColumn;i++) cells.push('');
     for(let d=1;d<=totalDays;d++) cells.push(d);
     while(cells.length % 7 !== 0) cells.push('');
 
     monthLabel.textContent = firstDay.toLocaleDateString('en-US',{month:'long',year:'numeric'});
     grid.innerHTML = '';
-    cells.forEach((day, index)=>{
+cells.forEach((day, index)=>{
       const cell = document.createElement('button');
       cell.type = 'button';
       cell.className = 'week-picker-cell';
-      if(!day){ cell.classList.add('muted'); cell.disabled = true; }
-      else {
-        const date = new Date(year, month, day);
-        const monday = startOfWeek(date);
-        const isSelectedDate = selectedDate && selectedDate.getFullYear() === date.getFullYear() && selectedDate.getMonth() === date.getMonth() && selectedDate.getDate() === date.getDate();
-        if(isSelectedDate) cell.classList.add('selected');
-        cell.textContent = day;
-        cell.addEventListener('click', ()=>{
-          input.value = toISODate(monday);
-          state.weekPickerSelectedDate = toISODate(date);
-          state.weekPickerMonth = new Date(date.getFullYear(), date.getMonth(), 1);
-          renderWeekPicker();
-        });
-      }
+      if(!day){ cell.classList.add('muted'); cell.disabled = true; grid.appendChild(cell); return; }
+      const date = new Date(year, month, day);
+      const monday = startOfWeek(date); // week always starts on Monday
+      const isMonday = date.getDay() === 1;
+      const isSelectedDate = selectedDate && selectedDate.getFullYear() === date.getFullYear() && selectedDate.getMonth() === date.getMonth() && selectedDate.getDate() === date.getDate();
+      if(isSelectedDate) cell.classList.add('selected');
+      if(isMonday) cell.classList.add('monday');
+      cell.textContent = day;
+      cell.addEventListener('click', ()=>{
+        input.value = toISODate(monday);
+        state.weekPickerSelectedDate = toISODate(date);
+        state.weekPickerMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+        renderWeekPicker();
+      });
       grid.appendChild(cell);
     });
 
