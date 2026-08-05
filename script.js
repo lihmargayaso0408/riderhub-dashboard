@@ -156,6 +156,100 @@
   }
   async function saveSummaryArr(hub,arr){ await storage.set(`summary:${hub}`, JSON.stringify(arr), false); }
 
+  function csvEscape(value){
+    const s = value===undefined || value===null ? '' : String(value);
+    if(/["]|[\r\n]|,/.test(s)) return `"${s.replace(/"/g,'""')}"`;
+    return s;
+  }
+
+  function makeCsv(rows, headers){
+    const lines = [headers.map(csvEscape).join(',')];
+    rows.forEach(row => {
+      lines.push(headers.map(h => csvEscape(row[h])).join(','));
+    });
+    return lines.join('\r\n');
+  }
+
+  function getExportDates(hub){
+    if(hub === 'All'){
+      return Array.from(new Set([...(state.hubIndex.Bauko||[]), ...(state.hubIndex.Buguias||[])])).sort();
+    }
+    return (state.hubIndex[hub]||[]).slice().sort();
+  }
+
+  function populateDownloadWeekOptions(){
+    const hub = $('#downloadHubSelect').value;
+    const weekSelect = $('#downloadWeekSelect');
+    const dates = getExportDates(hub);
+    weekSelect.innerHTML = '';
+    if(dates.length === 0){
+      weekSelect.disabled = true;
+      $('#downloadModalMsg').textContent = 'No weeks available for the selected hub.';
+      $('#confirmDownload').disabled = true;
+      return;
+    }
+    weekSelect.disabled = false;
+    $('#downloadModalMsg').textContent = '';
+    dates.slice().reverse().forEach(date => {
+      const opt = document.createElement('option');
+      opt.value = date;
+      opt.textContent = fmtWeekLabel(date);
+      weekSelect.appendChild(opt);
+    });
+    $('#confirmDownload').disabled = false;
+  }
+
+  async function buildDownloadRows(hub, date){
+    const exportRows = [];
+    const hubs = hub === 'All' ? HUBS : [hub];
+    for(const hubName of hubs){
+      const snap = await loadSnapshot(hubName, date);
+      if(!snap || !snap.rows) continue;
+      snap.rows.forEach(r => {
+        exportRows.push(Object.assign({hub: hubName, date}, r));
+      });
+    }
+    return exportRows;
+  }
+
+  function openDownloadModal(){
+    $('#downloadOverlay').classList.add('show');
+    $('#downloadModalMsg').textContent = '';
+    if(state.currentHub === 'All') $('#downloadHubSelect').value = 'All';
+    else $('#downloadHubSelect').value = state.currentHub;
+    populateDownloadWeekOptions();
+  }
+
+  function closeDownloadModal(){
+    $('#downloadOverlay').classList.remove('show');
+  }
+
+  async function downloadRecords(){
+    const hub = $('#downloadHubSelect').value;
+    const date = $('#downloadWeekSelect').value;
+    if(!date){
+      $('#downloadModalMsg').textContent = 'Please select a week to download.';
+      return;
+    }
+    const rows = await buildDownloadRows(hub, date);
+    if(rows.length === 0){
+      $('#downloadModalMsg').textContent = 'No records found for that selection.';
+      return;
+    }
+    const headers = ['hub','date','id','name','driverGroup','vehicleType','contractType','area','grade','attendDays','avgParcelsPerDay','deliverySuccessRate','callBeforeDeliveryRate','codRemittanceRate','confirmDeliveryRate','deliveryAttemptRate','metricPenalty','attendanceRate','daysWorking','parcelsAssigned','parcelsDeliveredToSP','parcelsDelivered','parcelsDeliveredIndividual','parcelsOnHold','slaAchievementRate','bonus','depreciation','discipline','lostRate'];
+    const csv = makeCsv(rows, headers);
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    const fileName = `${hub === 'All' ? 'Both-hubs' : hub}-${date}.csv`;
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+    closeDownloadModal();
+  }
+
   function daySummaryFromRows(date, rows){
     const active = rows.filter(r=>r.daysWorking>0);
     const avg = key => active.length ? active.reduce((a,r)=>a+r[key],0)/active.length : 0;
@@ -227,6 +321,23 @@
     return dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
   }
 
+  function weekNumberSinceJanuary(d){
+    const dt = new Date(d+'T00:00:00');
+    if(isNaN(dt)) return null;
+    const yearStart = new Date(dt.getFullYear(), 0, 1);
+    const diffDays = Math.floor((dt - yearStart) / 86400000);
+    return Math.floor(diffDays / 7) + 1;
+  }
+
+  function fmtWeekLabel(d){
+    if(!d) return '—';
+    const dt = new Date(d+'T00:00:00');
+    if(isNaN(dt)) return d;
+    const month = dt.toLocaleDateString('en-US',{month:'short'});
+    const week = weekNumberSinceJanuary(d);
+    return `${month} week ${week} ${dt.getFullYear()}`;
+  }
+
   async function init(){
     if(!hasFirebaseStorage){
       $('#storageBanner').innerHTML = `<div class="banner">
@@ -274,7 +385,7 @@
       dateSelect.style.display='';
       dates.slice().reverse().forEach(d=>{
         const opt = document.createElement('option');
-        opt.value = d; opt.textContent = fmtDate(d);
+        opt.value = d; opt.textContent = fmtWeekLabel(d);
         dateSelect.appendChild(opt);
       });
       if(!state.currentDate || !dates.includes(state.currentDate)){
@@ -284,6 +395,7 @@
     }
 
     $('#viewTitle').textContent = state.currentHub==='All' ? 'Both hubs' : state.currentHub;
+    $('#viewSub').textContent = state.currentDate ? `Snapshot for ${fmtWeekLabel(state.currentDate)}` : 'Snapshot for —';
 
     if(dates.length===0){
       renderEmpty();
@@ -353,6 +465,22 @@
     return series.length ? series : ((state.summaries[hub]||[]).slice().sort((a,b)=>a.date<b.date?-1:1));
   }
 
+function animateCountUp(el, target, isPct){
+    if(!el) return;
+    const targetNum = parseFloat(String(target).replace(/[^\d.\-]/g,''))||0;
+    const duration = 700;
+    const start = performance.now();
+    function frame(now){
+      const p = Math.min((now-start)/duration, 1);
+      const eased = 1 - Math.pow(1-p, 3);
+      const val = targetNum * eased;
+      el.textContent = isPct ? val.toFixed(1)+'%' : Math.round(val).toLocaleString();
+      if(p < 1) requestAnimationFrame(frame);
+      else el.textContent = target;
+    }
+    requestAnimationFrame(frame);
+  }
+
   async function renderContent(){
     const rows = state.rows;
     const active = rows.filter(r=>r.daysWorking>0);
@@ -360,30 +488,30 @@
     const sum = key => rows.reduce((a,r)=>a+r[key],0);
 
     const kpis = [
-      {label:'Riders on manifest', value: fmtNum(rows.length), sub:`${active.length} active`},
-      {label:'Delivery success rate', value: fmtPct(avg('deliverySuccessRate')), cls: avg('deliverySuccessRate')>=90?'teal':(avg('deliverySuccessRate')<75?'brick':'' )},
-      {label:'Attendance rate', value: fmtPct(avg('attendanceRate'))},
-      {label:'Parcels delivered', value: fmtNum(sum('parcelsDelivered')), sub:`${fmtNum(sum('parcelsAssigned'))} assigned`},
-      {label:'Parcels on hold', value: fmtNum(sum('parcelsOnHold')), cls: sum('parcelsOnHold')>0?'brick':''},
+      {label:'Riders on manifest', value: fmtNum(rows.length), sub:`${active.length} active`, anim:'num'},
+      {label:'Delivery success rate', value: fmtPct(avg('deliverySuccessRate')), cls: avg('deliverySuccessRate')>=90?'teal':(avg('deliverySuccessRate')<75?'brick':'' ), anim:'pct'},
+      {label:'Attendance rate', value: fmtPct(avg('attendanceRate')), anim:'pct'},
+      {label:'Parcels delivered', value: fmtNum(sum('parcelsDelivered')), sub:`${fmtNum(sum('parcelsAssigned'))} assigned`, anim:'num'},
+      {label:'Parcels on hold', value: fmtNum(sum('parcelsOnHold')), cls: sum('parcelsOnHold')>0?'brick':'', anim:'num'},
     ];
 
     let html = '<div class="kpis">';
-    kpis.forEach(k=>{
-      html += `<div class="kpi"><div class="kpi-label">${k.label}</div><div class="kpi-value ${k.cls||''}">${k.value}</div>${k.sub?`<div class="kpi-sub">${k.sub}</div>`:''}</div>`;
+    kpis.forEach((k,idx)=>{
+      html += `<div class="kpi animate-in delay-${idx+1}"><div class="kpi-label">${k.label}</div><div class="kpi-value ${k.cls||''}" data-anim-target="${k.value}" data-anim-type="${k.anim}">${k.value}</div>${k.sub?`<div class="kpi-sub">${k.sub}</div>`:''}</div>`;
     });
     html += '</div>';
 
     html += '<div class="panels">';
-    html += `<div class="panel"><h3>Vehicle types</h3><p class="hint">Rider count by vehicle type</p><div id="trendWrap"></div></div>`;
-    html += `<div class="panel"><h3>By driver group</h3><p class="hint">Avg. delivery success rate per group</p><canvas id="groupChart" height="180"></canvas></div>`;
+    html += `<div class="panel animate-in delay-2"><h3>Vehicle types</h3><p class="hint">Rider count by vehicle type</p><div id="trendWrap"></div></div>`;
+    html += `<div class="panel animate-in delay-3"><h3>By driver group</h3><p class="hint">Avg. delivery success rate per group</p><canvas id="groupChart" height="180"></canvas></div>`;
     html += '</div>';
 
     html += '<div class="strip">';
-    html += `<div class="panel"><h3>🟢 Top performers</h3><p class="hint">Highest delivery success (min. 1 active day)</p><div id="topList"></div></div>`;
-    html += `<div class="panel"><h3>🔻 Needs attention</h3><p class="hint">Lowest delivery success (min. 1 active day)</p><div id="bottomList"></div></div>`;
+    html += `<div class="panel animate-in delay-4"><h3>🟢 Top performers</h3><p class="hint">Highest delivery success (min. 1 active day)</p><div id="topList"></div></div>`;
+    html += `<div class="panel animate-in delay-5"><h3>🔻 Needs attention</h3><p class="hint">Lowest delivery success (min. 1 active day)</p><div id="bottomList"></div></div>`;
     html += '</div>';
 
-    html += `<div class="table-panel">
+    html += `<div class="table-panel animate-in delay-6">
       <div class="table-controls">
         <input type="text" id="searchInput" placeholder="Search rider name or ID…">
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-dim);"><input type="checkbox" id="hideInactiveToggle" ${state.hideInactive ? 'checked' : ''}> Hide inactive riders</label>
@@ -396,6 +524,13 @@
     </div>`;
 
     $('#content').innerHTML = html;
+
+    // Animate KPI values with a count-up effect
+    $$('.kpi-value').forEach(el=>{
+      const target = el.getAttribute('data-anim-target');
+      const type = el.getAttribute('data-anim-type');
+      animateCountUp(el, target, type==='pct');
+    });
 
     await renderTrend();
     renderGroupChart(rows);
@@ -849,6 +984,10 @@
       closeSettingsMenu();
       deleteSelectedDate();
     });
+    $('#downloadRecordsBtn').addEventListener('click', ()=>{
+      closeSettingsMenu();
+      openDownloadModal();
+    });
     $('#openRidersPageBtn').addEventListener('click', ()=>{
       closeSettingsMenu();
       window.open('riders-agency.html', '_blank', 'noopener,noreferrer');
@@ -862,7 +1001,12 @@
       state.weekPickerMonth = new Date(state.weekPickerMonth.getFullYear(), state.weekPickerMonth.getMonth() + 1, 1);
       renderWeekPicker();
     });
+    $('#downloadOverlay').addEventListener('click', e=>{ if(e.target.id==='downloadOverlay') closeDownloadModal(); });
     $('#overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') closeModal(); });
+
+    $('#downloadHubSelect').addEventListener('change', populateDownloadWeekOptions);
+    $('#cancelDownload').addEventListener('click', closeDownloadModal);
+    $('#confirmDownload').addEventListener('click', downloadRecords);
 
     $('#fileInput').addEventListener('change', e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); });
     $('#dropZone').addEventListener('dragover', e=>{ e.preventDefault(); $('#dropZone').classList.add('drag'); });

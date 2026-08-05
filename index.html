@@ -25,6 +25,9 @@
           <button class="settings-item" id="deleteDateMenuBtn" type="button">
             <span>Delete selected date</span>
           </button>
+          <button class="settings-item" id="downloadRecordsBtn" type="button">
+            <span>Download records</span>
+          </button>
           <button class="settings-item" id="openRidersPageBtn" type="button">
             <span>Riders &amp; Agency per hub</span>
           </button>
@@ -121,6 +124,30 @@
     <div class="modal-actions">
       <button class="btn-ghost" id="cancelUpload">Cancel</button>
       <button class="btn-primary" id="confirmUpload" disabled>Add to dashboard</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="downloadOverlay">
+  <div class="modal">
+    <h3>Download weekly records</h3>
+    <p class="hint">Select a hub and week to export the matching records as CSV.</p>
+    <div class="field">
+      <label for="downloadHubSelect">Hub</label>
+      <select id="downloadHubSelect">
+        <option value="Bauko">Bauko</option>
+        <option value="Buguias">Buguias</option>
+        <option value="All">Both hubs</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="downloadWeekSelect">Week</label>
+      <select id="downloadWeekSelect"></select>
+    </div>
+    <div class="modal-msg" id="downloadModalMsg"></div>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="cancelDownload">Cancel</button>
+      <button class="btn-primary" id="confirmDownload" disabled>Download CSV</button>
     </div>
   </div>
 </div>

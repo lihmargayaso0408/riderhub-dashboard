@@ -7,32 +7,75 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <style>
+<style>
     body{padding:0;margin:0;}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(18px);}to{opacity:1;transform:translateY(0);}}
+    @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+    @keyframes popIn{0%{transform:scale(.6);opacity:0;}70%{transform:scale(1.08);opacity:1;}100%{transform:scale(1);opacity:1;}}
+    @keyframes rowIn{from{opacity:0;transform:translateX(-14px);}to{opacity:1;transform:translateX(0);}}
+    @keyframes shimmer{0%{background-position:-300px 0;}100%{background-position:300px 0;}}
+    @media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important;}}
     .page-shell{max-width:1280px;margin:0 auto;padding:28px;}
-    .page-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;}
+    .page-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;animation:fadeUp .5s cubic-bezier(.22,.61,.36,1) both;}
     .page-head h1{font-family:'Space Grotesk',sans-serif;font-size:24px;margin:0;}
     .page-head p{margin:4px 0 0;color:var(--text-dim);font-size:13px;}
+    .back-link{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);text-decoration:none;margin-bottom:14px;transition:color .2s ease,transform .2s ease;animation:fadeIn .5s ease both;}
+    .back-link:hover{color:var(--amber);transform:translateX(-3px);}
     .status-box{background:var(--card);border:1px solid var(--line-2);border-radius:6px;padding:12px 14px;font-size:13px;color:var(--text-dim);}
     .page-actions{display:flex;align-items:center;gap:10px;}
-    .theme-toggle{border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 12px;border-radius:999px;cursor:pointer;font-size:13px;transition:background .15s ease,border-color .15s ease,color .15s ease;}
-    .theme-toggle:hover{background:var(--hover);}
-    .tabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
-    .tab-btn{border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 12px;border-radius:999px;cursor:pointer;font-size:13px;}
-    .tab-btn.active{background:var(--ink);color:#fff;border-color:var(--ink);} 
-    .table-card{background:var(--card);border:1px solid var(--line-2);border-radius:8px;padding:16px;overflow:auto;}
+    .theme-toggle{border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 12px;border-radius:999px;cursor:pointer;font-size:13px;transition:background .15s ease,border-color .15s ease,color .15s ease,transform .15s ease;}
+    .theme-toggle:hover{background:var(--hover);transform:translateY(-2px);}
+    .theme-toggle:active{transform:scale(.95);}
+    .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;}
+    @media (max-width:600px){.stats{grid-template-columns:repeat(2,1fr);}}
+    .stat-card{position:relative;overflow:hidden;background:var(--card);border:1px solid var(--line-2);border-radius:8px;padding:16px;transition:transform .25s cubic-bezier(.22,.61,.36,1),box-shadow .25s ease,border-color .25s ease;animation:fadeUp .5s cubic-bezier(.22,.61,.36,1) both;}
+    .stat-card::after{content:'';position:absolute;inset:0;background:linear-gradient(120deg,transparent 30%,rgba(255,255,255,.35) 50%,transparent 70%);background-size:300px 100%;background-repeat:no-repeat;opacity:0;}
+    body.dark .stat-card::after{background:linear-gradient(120deg,transparent 30%,rgba(255,255,255,.08) 50%,transparent 70%);background-size:300px 100%;background-repeat:no-repeat;}
+    .stat-card:hover{transform:translateY(-4px);box-shadow:0 12px 28px var(--shadow);border-color:var(--amber);}
+    .stat-card:hover::after{opacity:1;animation:shimmer 1.2s ease;}
+    .stat-label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin-bottom:6px;}
+    .stat-value{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:26px;}
+    .stat-value.teal{color:var(--teal);}
+    .stat-value.brick{color:var(--brick);}
+    .tabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;animation:fadeUp .5s cubic-bezier(.22,.61,.36,1) .1s both;}
+    .tab-btn{border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 12px;border-radius:999px;cursor:pointer;font-size:13px;transition:background .2s ease,color .2s ease,border-color .2s ease,transform .2s ease,box-shadow .2s ease;}
+    .tab-btn:hover{transform:translateY(-2px);border-color:var(--amber);}
+    .tab-btn:active{transform:scale(.95);}
+    .tab-btn.active{background:var(--ink);color:#fff;border-color:var(--ink);animation:popIn .35s cubic-bezier(.22,.61,.36,1) both;}
+    .table-card{background:var(--card);border:1px solid var(--line-2);border-radius:8px;padding:16px;overflow:auto;transition:transform .3s cubic-bezier(.22,.61,.36,1),box-shadow .3s ease;animation:fadeUp .5s cubic-bezier(.22,.61,.36,1) .15s both;}
+    .table-card:hover{transform:translateY(-3px);box-shadow:0 12px 28px var(--shadow);}
+    .table-controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center;}
+    .search-input{flex:1;min-width:180px;padding:9px 12px;border:1px solid var(--line);border-radius:3px;font-family:'IBM Plex Sans',sans-serif;font-size:13px;background:var(--card);color:var(--text);transition:border-color .2s ease,box-shadow .2s ease;}
+    .search-input:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 3px rgba(232,163,61,.15);}
     table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px;}
     th, td{padding:10px 12px;border-bottom:1px solid var(--line-2);text-align:left;white-space:nowrap;}
     th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);}
+    tbody tr{animation:rowIn .4s ease both;transition:background .18s ease,transform .18s ease;}
+    tbody tr:nth-child(1){animation-delay:.05s;}
+    tbody tr:nth-child(2){animation-delay:.1s;}
+    tbody tr:nth-child(3){animation-delay:.15s;}
+    tbody tr:nth-child(4){animation-delay:.2s;}
+    tbody tr:nth-child(5){animation-delay:.25s;}
+    tbody tr:nth-child(6){animation-delay:.3s;}
+    tbody tr:nth-child(7){animation-delay:.35s;}
+    tbody tr:nth-child(8){animation-delay:.4s;}
+    tbody tr:nth-child(n+9){animation-delay:.45s;}
+    tbody tr:hover{background:var(--hover);transform:translateX(3px);}
+    .rider-cell{white-space:normal;}
+    .rider-cell b{display:block;font-size:13px;font-weight:600;}
     .muted{color:var(--text-dim);}
     .error{color:var(--brick);}
-    .status-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;}
+    .status-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;transition:transform .2s ease,box-shadow .2s ease;}
+    .status-chip:hover{transform:scale(1.12);}
+    .status-chip::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;animation:glow 1.6s ease-in-out infinite;}
+    @keyframes glow{0%,100%{opacity:.4;}50%{opacity:1;}}
     .status-active{background:rgba(52,211,153,.14);color:#22c55e;}
     .status-suspended{background:rgba(239,68,68,.12);color:#ef4444;}
   </style>
 </head>
 <body>
   <div class="page-shell">
+    <a class="back-link" href="index.html">← Back to Dispatch Board</a>
     <div class="page-head">
       <div>
         <h1>Riders &amp; Agency per Hub</h1>
@@ -47,7 +90,11 @@
       <button class="tab-btn active" data-hub="Buguias" type="button">Buguias</button>
       <button class="tab-btn" data-hub="Bauko" type="button">Bauko</button>
     </div>
+    <div class="stats" id="statsRow"></div>
     <div class="table-card">
+      <div class="table-controls">
+        <input type="text" class="search-input" id="searchInput" placeholder="Search rider, area, agency or account ID…">
+      </div>
       <table>
         <thead>
           <tr>
@@ -70,13 +117,48 @@
       Buguias: 'Buguias',
       Bauko: 'Bauko'
     };
-    const statusEl = document.getElementById('sheetStatus');
+const statusEl = document.getElementById('sheetStatus');
     const rowsEl = document.getElementById('sheetRows');
     const themeToggleEl = document.getElementById('themeToggle');
     const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
+    const statsRowEl = document.getElementById('statsRow');
+    const searchEl = document.getElementById('searchInput');
     let allRows = [];
     let currentHub = 'Buguias';
     let hasHubColumn = false;
+    let searchQuery = '';
+
+    function animateCountUp(el, target) {
+      const targetNum = parseFloat(String(target).replace(/[^\d.\-]/g, '')) || 0;
+      const duration = 700;
+      const start = performance.now();
+      function frame(now) {
+        const p = Math.min((now - start) / duration, 1);
+        const eased = 1 - Math.pow(1 - p, 3);
+        el.textContent = Math.round(targetNum * eased).toLocaleString();
+        if (p < 1) requestAnimationFrame(frame);
+        else el.textContent = Number(targetNum).toLocaleString();
+      }
+      requestAnimationFrame(frame);
+    }
+
+    function renderStats(rows) {
+      const active = rows.filter(r => String(r.status || '').trim().toLowerCase() === 'active');
+      const suspended = rows.filter(r => String(r.status || '').trim().toLowerCase() === 'suspended');
+      const agencies = new Set(rows.map(r => String(r.agency || '').trim().toLowerCase()).filter(Boolean));
+      const cards = [
+        { label: 'Total riders', value: rows.length },
+        { label: 'Active', value: active.length, cls: 'teal' },
+        { label: 'Suspended', value: suspended.length, cls: rows.length ? 'brick' : '' },
+        { label: 'Agencies', value: agencies.size }
+      ];
+      statsRowEl.innerHTML = cards.map((c, i) => `
+        <div class="stat-card" style="animation-delay:${i * 0.05}s">
+          <div class="stat-label">${c.label}</div>
+          <div class="stat-value ${c.cls || ''}" data-target="${c.value}">0</div>
+        </div>`).join('');
+      statsRowEl.querySelectorAll('.stat-value').forEach(el => animateCountUp(el, el.getAttribute('data-target')));
+    }
 
     async function loadSheet() {
       try {
@@ -133,6 +215,7 @@
           hub: hasHubColumn ? getCell(values, index.hub) : ''
         })).filter(row => row.riderName || row.area || row.accountId || row.agency || row.status || row.hub);
 
+renderStats(getFilteredRows());
         renderRows();
         statusEl.textContent = `Loaded ${allRows.length} rider records`;
       } catch (err) {
@@ -227,8 +310,18 @@
       });
     }
 
-    function renderRows() {
-      const rows = getFilteredRows();
+function renderRows() {
+      let rows = getFilteredRows();
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        rows = rows.filter(r =>
+          String(r.riderName || '').toLowerCase().includes(q) ||
+          String(r.area || '').toLowerCase().includes(q) ||
+          String(r.agency || '').toLowerCase().includes(q) ||
+          String(r.accountId || '').toLowerCase().includes(q) ||
+          String(r.contact || '').toLowerCase().includes(q)
+        );
+      }
       if (!rows.length) {
         rowsEl.innerHTML = '<tr><td colspan="6" class="muted">No rider records found for this hub.</td></tr>';
         return;
@@ -238,7 +331,7 @@
         const statusClass = getStatusClass(statusValue);
         return `
           <tr>
-            <td>${escapeHtml(r.riderName)}</td>
+            <td class="rider-cell"><b>${escapeHtml(r.riderName)}</b></td>
             <td>${escapeHtml(r.area)}</td>
             <td>${escapeHtml(r.contact)}</td>
             <td>${escapeHtml(r.accountId)}</td>
@@ -284,8 +377,13 @@
       setTheme(nextTheme);
     });
 
-    const savedTheme = getSavedTheme();
+const savedTheme = getSavedTheme();
     setTheme(savedTheme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+
+    searchEl.addEventListener('input', () => {
+      searchQuery = searchEl.value.trim();
+      renderRows();
+    });
 
     tabButtons.forEach(btn => {
       btn.addEventListener('click', async () => {
