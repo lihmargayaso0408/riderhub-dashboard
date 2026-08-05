@@ -348,11 +348,13 @@ function fmtWeekLabel(d){
     window.addEventListener('error', function(e){
       showToast('Something went wrong: ' + (e.message || 'unknown error'));
     });
-    const theme = await loadTheme();
+const theme = await loadTheme();
     applyTheme(theme);
     state.hubIndex = await getIndex();
     state.summaries.Bauko = await getSummary('Bauko');
     state.summaries.Buguias = await getSummary('Buguias');
+    // Build rider name -> Area lookup from the Riders & Agency sheet
+    areaLookup = await buildAreaLookup();
     setActiveTab('All');
     await refreshView();
     wireStaticEvents();
@@ -415,7 +417,17 @@ function fmtWeekLabel(d){
       const snap = await loadSnapshot(state.currentHub, state.currentDate);
       if(snap) rows = snap.rows.map(r=>Object.assign({},r,{hub:state.currentHub, snapDate:state.currentDate}));
     }
-    state.rows = rows;
+state.rows = rows;
+
+    // Populate the Area from the Riders & Agency sheet by matching rider name
+    if(areaLookup && areaLookup.size){
+      rows.forEach(r => {
+        const key = String(r.name || '').trim().toLowerCase();
+        if(key && areaLookup.has(key)){
+          r.area = areaLookup.get(key);
+        }
+      });
+    }
 
     $('#viewSub').textContent = state.currentHub==='All'
       ? 'Combined snapshot — each hub shown as of its latest upload'
@@ -442,25 +454,6 @@ function fmtWeekLabel(d){
         <button class="btn-primary" id="emptyUploadBtn">Upload manifest</button>
       </div>`;
     $('#emptyUploadBtn').addEventListener('click', openModal);
-  }
-
-  async function buildTrendSeries(hub){
-    const dates = (state.hubIndex[hub]||[]).slice().sort();
-    const series = [];
-    for(const date of dates){
-      const snap = await loadSnapshot(hub, date);
-      if(!snap || !Array.isArray(snap.rows)) continue;
-      const rows = snap.rows;
-      const active = rows.filter(r=>r.daysWorking>0);
-      const avg = key => active.length ? active.reduce((a,r)=>a+r[key],0)/active.length : 0;
-      series.push({
-        date,
-        avgDeliverySuccess: avg('deliverySuccessRate'),
-        avgSLA: avg('slaAchievementRate'),
-        avgAttendance: avg('attendanceRate'),
-      });
-    }
-    return series.length ? series : ((state.summaries[hub]||[]).slice().sort((a,b)=>a.date<b.date?-1:1));
   }
 
 function animateCountUp(el, target, isPct){
@@ -499,12 +492,12 @@ function animateCountUp(el, target, isPct){
     });
     html += '</div>';
 
-    html += '<div class="panels">';
+html += '<div class="panels">';
     html += `<div class="panel animate-in delay-2"><h3>Vehicle types</h3><p class="hint">Rider count by vehicle type</p><div id="trendWrap"></div></div>`;
     html += `<div class="panel animate-in delay-3"><h3>By driver group</h3><p class="hint">Avg. delivery success rate per group</p><canvas id="groupChart" height="180"></canvas></div>`;
     html += '</div>';
 
-    html += '<div class="strip">';
+html += '<div class="strip">';
     html += `<div class="panel animate-in delay-4"><h3>🟢 Top performers</h3><p class="hint">Highest delivery success (min. 1 active day)</p><div id="topList"></div></div>`;
     html += `<div class="panel animate-in delay-5"><h3>🔻 Needs attention</h3><p class="hint">Lowest delivery success (min. 1 active day)</p><div id="bottomList"></div></div>`;
     html += '</div>';
@@ -530,7 +523,7 @@ function animateCountUp(el, target, isPct){
       animateCountUp(el, target, type==='pct');
     });
 
-    await renderTrend();
+await renderTrend();
     renderGroupChart(rows);
     renderTopBottom(rows);
     setupTableControls(rows);
@@ -565,7 +558,8 @@ function animateCountUp(el, target, isPct){
     `;
   }
 
-  let groupChartInstance = null;
+let groupChartInstance = null;
+
   function renderGroupChart(rows){
     const groups = {};
     rows.forEach(r=>{
@@ -950,12 +944,51 @@ cells.forEach((day, index)=>{
 /* ---------------- Riders & Agency modal (single page) ---------------- */
   const RIDERS_SHEET_ID = '1aGJXuO3tz5oLJyL6piEljz4A6cg6l0cnKvmtIpLkqMI';
   const RIDERS_HUB_SHEET = { Buguias:'Buguias', Bauko:'Bauko' };
-  const riders = {
+const riders = {
     allRows: [],
     currentHub: 'Buguias',
     search: '',
     hasHubColumn: false,
   };
+
+  // Lookup of rider name -> Area, built from the Riders & Agency Google Sheet
+  let areaLookup = new Map();
+
+  async function buildAreaLookup(){
+    const map = new Map();
+    for(const hub of HUBS){
+      try{
+        const sheetName = RIDERS_HUB_SHEET[hub] || hub;
+        const url = `https://docs.google.com/spreadsheets/d/${RIDERS_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
+        const response = await fetch(url);
+        if(!response.ok) continue;
+        const text = await response.text();
+        const rawLines = text.split(/\r\n|\n|\r/);
+        if(rawLines.length < 2) continue;
+        const parsedLines = rawLines.map(parseSheetCsvLine);
+        const headerRowIndex = parsedLines.findIndex(values => {
+          const normalized = values.map(v => String(v||'').trim().toLowerCase());
+          return normalized.some(h=>['rider name','rider','driver name','driver','name'].includes(h))
+            && normalized.some(h=>['area','location'].includes(h));
+        });
+        if(headerRowIndex < 0) continue;
+        const headers = parsedLines[headerRowIndex];
+        const normalizedHeaders = headers.map(h => String(h||'').trim().toLowerCase());
+        const nameIdx = findSheetHeaderIndex(normalizedHeaders, ['rider name','rider','driver name','driver','name']);
+        const areaIdx = findSheetHeaderIndex(normalizedHeaders, ['area','location']);
+        if(nameIdx < 0 || areaIdx < 0) continue;
+        for(let i=headerRowIndex+1;i<parsedLines.length;i++){
+          const values = parsedLines[i];
+          if(values.some(c => String(c||'').trim() !== '')){
+            const name = String(values[nameIdx]||'').trim().toLowerCase();
+            const area = String(values[areaIdx]||'').trim();
+            if(name && area && !map.has(name)) map.set(name, area);
+          }
+        }
+      }catch(e){ /* ignore sheet errors */ }
+    }
+    return map;
+  }
 
 function escapeHtml2(s){
   return String(s||'').replace(/[&<>"']/g, function(c){
@@ -1181,6 +1214,10 @@ function escapeHtml2(s){
 $('#openRidersPageBtn').addEventListener('click', ()=>{
       closeSettingsMenu();
       openRidersModal();
+    });
+    $('#openLossReportBtn').addEventListener('click', ()=>{
+      closeSettingsMenu();
+      window.location.href = 'loss-report.html';
     });
     $('#cancelUpload').addEventListener('click', closeModal);
     $('#weekPrevBtn').addEventListener('click', ()=>{

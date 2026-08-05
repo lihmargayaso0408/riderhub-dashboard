@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Loss Report per Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body{padding:0;margin:0;}
+    .page-shell{max-width:1440px;margin:0 auto;padding:28px;}
+    .page-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;}
+    .page-head h1{font-family:'Space Grotesk',sans-serif;font-size:24px;margin:0;}
+    .page-head p{margin:4px 0 0;color:var(--text-dim);font-size:13px;}
+    .status-box{background:var(--card);border:1px solid var(--line-2);border-radius:6px;padding:12px 14px;font-size:13px;color:var(--text-dim);}
+    .page-actions{display:flex;align-items:center;gap:10px;}
+    .theme-toggle{border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 12px;border-radius:999px;cursor:pointer;font-size:13px;transition:background .15s ease,border-color .15s ease,color .15s ease;}
+    .theme-toggle:hover{background:var(--hover);}
+    .back-link{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 12px;border-radius:999px;cursor:pointer;font-size:13px;text-decoration:none;transition:background .15s ease,border-color .15s ease;}
+    .back-link:hover{background:var(--hover);}
+    .tabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+    .tab-btn{border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 12px;border-radius:999px;cursor:pointer;font-size:13px;transition:transform .2s ease,background .15s ease,border-color .15s ease,color .15s ease;}
+    .tab-btn:hover{transform:translateY(-2px);}
+    .tab-btn.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+    .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}
+    @media (max-width:700px){.stats-row{grid-template-columns:repeat(2,1fr);}}
+    .stat-card{background:var(--card);border:1px solid var(--line-2);border-radius:6px;padding:14px;transition:transform .25s cubic-bezier(.22,.61,.36,1),box-shadow .25s ease,border-color .25s ease;}
+    .stat-card:hover{transform:translateY(-3px);box-shadow:0 10px 24px var(--shadow);border-color:var(--amber);}
+    .stat-label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin-bottom:8px;}
+    .stat-value{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;}
+    .stat-value.teal{color:var(--teal);}
+    .stat-value.brick{color:var(--brick);}
+    .stat-value.amber{color:var(--amber-deep);}
+    .search-row{margin-bottom:12px;}
+    .search-row input{width:100%;max-width:340px;padding:9px 12px;border:1px solid var(--line);border-radius:3px;font-family:'IBM Plex Sans';font-size:13px;background:var(--card);color:var(--text);}
+    .table-card{background:var(--card);border:1px solid var(--line-2);border-radius:8px;padding:16px;overflow:auto;}
+    table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:1400px;}
+    th, td{padding:9px 11px;border-bottom:1px solid var(--line-2);text-align:left;white-space:nowrap;}
+    th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);cursor:pointer;user-select:none;}
+    th:hover{color:var(--text);}
+    tbody tr{transition:background .12s ease;}
+    tbody tr:hover{background:var(--hover);}
+    .muted{color:var(--text-dim);}
+    .error{color:var(--brick);}
+    .num{font-family:'IBM Plex Mono',monospace;text-align:right;}
+    .money{font-family:'IBM Plex Mono',monospace;text-align:right;font-weight:600;}
+    .loss-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;}
+    .loss-Driver{background:rgba(239,68,68,.12);color:#ef4444;}
+    .loss-Hub{background:rgba(232,163,61,.16);color:#c97f1e;}
+    .loss-FM{background:rgba(59,130,246,.14);color:#3b82f6;}
+    .animate-in{animation:fadeUp .5s cubic-bezier(.22,.61,.36,1) both;}
+    .delay-1{animation-delay:.05s;}
+    .delay-2{animation-delay:.1s;}
+    .delay-3{animation-delay:.15s;}
+    .delay-4{animation-delay:.2s;}
+  </style>
+</head>
+<body>
+  <div class="page-shell">
+    <div class="page-head">
+      <div>
+        <h1>Loss Report per Hub</h1>
+        <p>Data is loaded from the shared Loss Report spreadsheet and split by hub.</p>
+      </div>
+      <div class="page-actions">
+        <a class="back-link" href="index.html">← Back to Dispatch Board</a>
+        <button class="theme-toggle" id="themeToggle" type="button">Dark mode</button>
+        <div class="status-box" id="sheetStatus">Loading sheet…</div>
+      </div>
+    </div>
+    <div class="tabs" id="hubTabs">
+      <button class="tab-btn active" data-hub="Buguias" type="button">Buguias</button>
+      <button class="tab-btn" data-hub="Bauko" type="button">Bauko</button>
+    </div>
+    <div class="stats-row" id="statsRow"></div>
+    <div class="search-row">
+      <input type="text" id="searchInput" placeholder="Search report date, loss party, status, sample, area cluster…">
+    </div>
+    <div class="table-card">
+      <table>
+        <thead>
+          <tr>
+            <th data-sort="report_date">Report Date</th>
+            <th data-sort="station_name">Station Name</th>
+            <th data-sort="loss_party">Loss Party</th>
+            <th data-sort="detailed_status_with_leg">Detailed Status w/ Leg</th>
+            <th data-sort="area_cluster">Area Cluster</th>
+            <th data-sort="region">Region</th>
+            <th data-sort="num_loss">Num Loss</th>
+<th data-sort="total_cogs_usd">Total COGS (₱)</th>
+            <th data-sort="RR_identifier">RR Identifier</th>
+            <th data-sort="sample">Sample</th>
+            <th data-sort="RTS_identifier">RTS Identifier</th>
+            <th data-sort="Mother_hub_for_MB">Mother Hub for MB</th>
+          </tr>
+        </thead>
+        <tbody id="lossRows"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const LOSS_SHEET_ID = '1Y-Okr8YoWQx-xbylmUHndT-xVTUtHzDP6cejtTOXzEU';
+    const HUB_SHEET_NAME = { Buguias: 'Buguias', Bauko: 'Bauko' };
+
+    const statusEl = document.getElementById('sheetStatus');
+    const rowsEl = document.getElementById('lossRows');
+    const statsRowEl = document.getElementById('statsRow');
+    const searchEl = document.getElementById('searchInput');
+    const themeToggleEl = document.getElementById('themeToggle');
+    const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
+    const sortableHeaders = Array.from(document.querySelectorAll('th[data-sort]'));
+
+    let allRows = [];
+    let currentHub = 'Buguias';
+    let search = '';
+    let sortKey = 'report_date';
+    let sortDir = 'desc';
+
+    function parseCsvLine(line) {
+      const values = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+          else { inQuotes = !inQuotes; }
+        } else if (ch === ',' && !inQuotes) { values.push(current); current = ''; }
+        else { current += ch; }
+      }
+      values.push(current);
+      return values;
+    }
+
+    function escapeHtml(value) {
+      return String(value || '').replace(/[&<>"']/g, match => ({'&':'&amp;','<':'<','>':'>','"':'"',"'":'&#39;'}[match]));
+    }
+
+    function findHeaderIndex(headers, candidates) {
+      for (const candidate of candidates) {
+        const index = headers.findIndex(h => h === candidate || h.includes(candidate));
+        if (index >= 0) return index;
+      }
+      return -1;
+    }
+
+    function getCell(values, index) {
+      return index >= 0 && values[index] !== undefined ? values[index].trim() : '';
+    }
+
+    function cleanNum(value) {
+      if (value === undefined || value === null) return 0;
+      const n = parseFloat(String(value).replace(/[^\d.\-]/g, ''));
+      return isNaN(n) ? 0 : n;
+    }
+
+function fmtMoney(n) {
+      return '₱' + Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    async function loadSheet() {
+      try {
+        const sheetName = HUB_SHEET_NAME[currentHub] || HUB_SHEET_NAME.Buguias;
+        const SHEET_URL = `https://docs.google.com/spreadsheets/d/${LOSS_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
+        const response = await fetch(SHEET_URL);
+        if (!response.ok) throw new Error('Unable to fetch sheet');
+        const text = await response.text();
+        const rawLines = text.split(/\r\n|\n|\r/);
+        if (rawLines.length < 2) throw new Error('No rows found in sheet');
+
+        const parsedLines = rawLines.map(line => parseCsvLine(line));
+        const headerRowIndex = parsedLines.findIndex(values => {
+          const normalized = values.map(v => String(v || '').trim().toLowerCase());
+          return normalized.some(h => ['report_date','date','report date'].includes(h))
+              && normalized.some(h => ['station_name','station','hub'].includes(h))
+              && normalized.some(h => ['loss_party','loss party','loss'].includes(h));
+        });
+        if (headerRowIndex < 0) throw new Error('Header row not found in sheet');
+
+        const headers = parsedLines[headerRowIndex];
+        const expectedColumns = headers.length;
+        const normalizedHeaders = headers.map(h => String(h || '').trim().toLowerCase());
+
+        function isHeaderRow(values) {
+          const normalized = values.map(v => String(v || '').trim().toLowerCase());
+          return normalizedHeaders.every((header, idx) => normalized[idx] === header || normalized[idx] === '');
+        }
+
+        const dataRows = parsedLines.slice(headerRowIndex + 1)
+          .filter(row => row.some(cell => String(cell || '').trim() !== ''))
+          .filter(row => !isHeaderRow(row))
+          .map(row => row.concat(Array(Math.max(0, expectedColumns - row.length)).fill('')));
+
+        const index = {
+          report_date: findHeaderIndex(normalizedHeaders, ['report_date','date','report date']),
+          station_name: findHeaderIndex(normalizedHeaders, ['station_name','station','hub']),
+          loss_party: findHeaderIndex(normalizedHeaders, ['loss_party','loss party','loss']),
+          detailed_status_with_leg: findHeaderIndex(normalizedHeaders, ['detailed_status_with_leg','detailed status','status']),
+          area_cluster: findHeaderIndex(normalizedHeaders, ['area_cluster','area cluster','area']),
+          region: findHeaderIndex(normalizedHeaders, ['region']),
+          num_loss: findHeaderIndex(normalizedHeaders, ['num_loss','num loss','number of loss']),
+          total_cogs_usd: findHeaderIndex(normalizedHeaders, ['total_cogs_usd','total cogs','cogs','total']),
+          RR_identifier: findHeaderIndex(normalizedHeaders, ['rr_identifier','rr','rr id']),
+          sample: findHeaderIndex(normalizedHeaders, ['sample']),
+          RTS_identifier: findHeaderIndex(normalizedHeaders, ['rts_identifier','rts','rts id']),
+          Mother_hub_for_MB: findHeaderIndex(normalizedHeaders, ['mother_hub_for_mb','mother hub','mother hub for mb'])
+        };
+
+        allRows = dataRows.map(values => ({
+          report_date: getCell(values, index.report_date),
+          station_name: getCell(values, index.station_name),
+          loss_party: getCell(values, index.loss_party),
+          detailed_status_with_leg: getCell(values, index.detailed_status_with_leg),
+          area_cluster: getCell(values, index.area_cluster),
+          region: getCell(values, index.region),
+          num_loss: cleanNum(getCell(values, index.num_loss)),
+          total_cogs_usd: cleanNum(getCell(values, index.total_cogs_usd)),
+          RR_identifier: getCell(values, index.RR_identifier),
+          sample: getCell(values, index.sample),
+          RTS_identifier: getCell(values, index.RTS_identifier),
+          Mother_hub_for_MB: getCell(values, index.Mother_hub_for_MB)
+        })).filter(row => row.report_date || row.loss_party || row.sample || row.num_loss || row.total_cogs_usd);
+
+        renderStats();
+        renderRows();
+        statusEl.textContent = `Loaded ${allRows.length} loss records`;
+      } catch (err) {
+        console.error(err);
+        statusEl.innerHTML = '<span class="error">Could not load the Loss Report spreadsheet. Check the link and try again.</span>';
+        rowsEl.innerHTML = '<tr><td colspan="12" class="error">No data available.</td></tr>';
+        statsRowEl.innerHTML = '';
+      }
+    }
+
+    function getFilteredRows() {
+      return allRows;
+    }
+
+    function applySorting(rows) {
+      const dir = sortDir === 'asc' ? 1 : -1;
+      return rows.slice().sort((a, b) => {
+        let av = a[sortKey], bv = b[sortKey];
+        if (sortKey === 'num_loss' || sortKey === 'total_cogs_usd') {
+          av = Number(av) || 0; bv = Number(bv) || 0;
+          return (av - bv) * dir;
+        }
+        av = String(av || '').toLowerCase();
+        bv = String(bv || '').toLowerCase();
+        if (av < bv) return -1 * dir;
+        if (av > bv) return 1 * dir;
+        return 0;
+      });
+    }
+
+    function renderStats() {
+      const rows = getFilteredRows();
+      const totalRecords = rows.length;
+      const totalLoss = rows.reduce((sum, r) => sum + (Number(r.num_loss) || 0), 0);
+      const totalCogs = rows.reduce((sum, r) => sum + (Number(r.total_cogs_usd) || 0), 0);
+      const driverLoss = rows.filter(r => /driver/i.test(String(r.loss_party || ''))).length;
+      const stats = [
+        { label: 'Loss records', value: totalRecords, cls: '' },
+        { label: 'Total units lost', value: totalLoss, cls: 'amber' },
+{ label: 'Total COGS (₱)', value: fmtMoney(totalCogs), cls: 'brick' },
+        { label: 'Driver losses', value: driverLoss, cls: 'teal' },
+      ];
+      statsRowEl.innerHTML = stats.map((s, idx) => `
+        <div class="stat-card animate-in delay-${idx + 1}">
+          <div class="stat-label">${s.label}</div>
+          <div class="stat-value ${s.cls}">${s.value}</div>
+        </div>
+      `).join('');
+    }
+
+    function getLossClass(lossParty) {
+      const normalized = String(lossParty || '').toLowerCase();
+      if (normalized.includes('driver')) return 'loss-Driver';
+      if (normalized.includes('fm')) return 'loss-FM';
+      return 'loss-Hub';
+    }
+
+    function renderRows() {
+      let rows = getFilteredRows();
+      if (search) {
+        const q = search.toLowerCase();
+        rows = rows.filter(r =>
+          String(r.report_date || '').toLowerCase().includes(q) ||
+          String(r.loss_party || '').toLowerCase().includes(q) ||
+          String(r.detailed_status_with_leg || '').toLowerCase().includes(q) ||
+          String(r.sample || '').toLowerCase().includes(q) ||
+          String(r.area_cluster || '').toLowerCase().includes(q) ||
+          String(r.RR_identifier || '').toLowerCase().includes(q) ||
+          String(r.RTS_identifier || '').toLowerCase().includes(q) ||
+          String(r.station_name || '').toLowerCase().includes(q)
+        );
+      }
+      rows = applySorting(rows);
+      if (!rows.length) {
+        rowsEl.innerHTML = '<tr><td colspan="12" class="muted">No loss records found for this hub.</td></tr>';
+        return;
+      }
+      rowsEl.innerHTML = rows.map(r => {
+        const lossClass = getLossClass(r.loss_party);
+        return `
+          <tr>
+            <td>${escapeHtml(r.report_date)}</td>
+            <td>${escapeHtml(r.station_name)}</td>
+            <td><span class="loss-chip ${lossClass}">${escapeHtml(r.loss_party)}</span></td>
+            <td>${escapeHtml(r.detailed_status_with_leg)}</td>
+            <td>${escapeHtml(r.area_cluster)}</td>
+            <td>${escapeHtml(r.region)}</td>
+            <td class="num">${escapeHtml(r.num_loss)}</td>
+<td class="money">${fmtMoney(r.total_cogs_usd)}</td>
+            <td>${escapeHtml(r.RR_identifier)}</td>
+            <td>${escapeHtml(r.sample)}</td>
+            <td>${escapeHtml(r.RTS_identifier)}</td>
+            <td>${escapeHtml(r.Mother_hub_for_MB)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function getSavedTheme() {
+      try { return localStorage.getItem('lossReportTheme'); } catch (err) { return null; }
+    }
+
+    function setTheme(theme) {
+      const isDark = theme === 'dark';
+      document.body.classList.toggle('dark', isDark);
+      themeToggleEl.textContent = isDark ? 'Light mode' : 'Dark mode';
+      try { localStorage.setItem('lossReportTheme', theme); } catch (err) {}
+    }
+
+    themeToggleEl.addEventListener('click', () => {
+      const nextTheme = document.body.classList.contains('dark') ? 'light' : 'dark';
+      setTheme(nextTheme);
+    });
+
+    const savedTheme = getSavedTheme();
+    setTheme(savedTheme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+
+    searchEl.addEventListener('input', e => { search = e.target.value; renderRows(); });
+
+    sortableHeaders.forEach(th => {
+      th.addEventListener('click', () => {
+        const key = th.dataset.sort;
+        if (sortKey === key) { sortDir = sortDir === 'asc' ? 'desc' : 'asc'; }
+        else { sortKey = key; sortDir = 'desc'; }
+        renderRows();
+      });
+    });
+
+    tabButtons.forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (btn.dataset.hub === currentHub) return;
+        currentHub = btn.dataset.hub;
+        tabButtons.forEach(b => b.classList.toggle('active', b === btn));
+        statusEl.textContent = 'Loading sheet…';
+        rowsEl.innerHTML = '<tr><td colspan="12" class="muted">Loading...</td></tr>';
+        await loadSheet();
+      });
+    });
+
+    loadSheet();
+  </script>
+</body>
+</html>
