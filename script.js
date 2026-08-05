@@ -949,6 +949,198 @@ function animateCountUp(el, target, isPct){
     showToast('All stored data cleared.');
   }
 
+/* ---------------- Riders & Agency modal (single page) ---------------- */
+  const RIDERS_SHEET_ID = '1aGJXuO3tz5oLJyL6piEljz4A6cg6l0cnKvmtIpLkqMI';
+  const RIDERS_HUB_SHEET = { Buguias:'Buguias', Bauko:'Bauko' };
+  const riders = {
+    allRows: [],
+    currentHub: 'Buguias',
+    search: '',
+    hasHubColumn: false,
+  };
+
+function escapeHtml2(s){
+  return String(s||'').replace(/[&<>"']/g, function(c){
+    var amp='&';
+    var map = {'&':amp+'amp;','<':amp+'lt;','>':amp+'gt;','"':amp+'quot;',"'":amp+'#39;'};
+    return map[c];
+  });
+}
+
+  function parseSheetCsvLine(line){
+    const values = [];
+    let current = '', inQuotes = false;
+    for(let i=0;i<line.length;i++){
+      const ch = line[i];
+      if(ch === '"'){
+        if(inQuotes && line[i+1] === '"'){ current += '"'; i++; }
+        else { inQuotes = !inQuotes; }
+      } else if(ch === ',' && !inQuotes){ values.push(current); current=''; }
+      else { current += ch; }
+    }
+    values.push(current);
+    return values;
+  }
+
+  function findSheetHeaderIndex(headers, candidates){
+    for(const candidate of candidates){
+      const idx = headers.findIndex(h => h === candidate || h.includes(candidate));
+      if(idx >= 0) return idx;
+    }
+    return -1;
+  }
+
+  async function loadRidersSheet(){
+    const statusEl = $('#ridersStatus');
+    if(!statusEl) return;
+    try{
+      const sheetName = RIDERS_HUB_SHEET[riders.currentHub] || RIDERS_HUB_SHEET.Buguias;
+      const url = `https://docs.google.com/spreadsheets/d/${RIDERS_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
+      const response = await fetch(url);
+      if(!response.ok) throw new Error('Unable to fetch sheet');
+      const text = await response.text();
+      const rawLines = text.split(/\r\n|\n|\r/);
+      if(rawLines.length < 2) throw new Error('No rows found in sheet');
+
+      const parsedLines = rawLines.map(parseSheetCsvLine);
+      const headerRowIndex = parsedLines.findIndex(values => {
+        const normalized = values.map(v => String(v||'').trim().toLowerCase());
+        return normalized.some(h=>['rider name','rider','driver name','driver','name'].includes(h))
+          && normalized.some(h=>['area','location'].includes(h));
+      });
+      if(headerRowIndex < 0) throw new Error('Header row not found in sheet');
+
+      const headers = parsedLines[headerRowIndex];
+      const expectedColumns = headers.length;
+      const normalizedHeaders = headers.map(h => String(h||'').trim().toLowerCase());
+
+      function isHeaderRow(values){
+        const normalized = values.map(v => String(v||'').trim().toLowerCase());
+        return normalizedHeaders.every((header, idx) => normalized[idx] === header || normalized[idx] === '');
+      }
+
+      const dataRows = parsedLines.slice(headerRowIndex + 1)
+        .filter(row => row.some(cell => String(cell||'').trim() !== ''))
+        .filter(row => !isHeaderRow(row))
+        .map(row => row.concat(Array(Math.max(0, expectedColumns - row.length)).fill('')));
+
+      const index = {
+        riderName: findSheetHeaderIndex(normalizedHeaders, ['rider name','rider','driver name','driver','name']),
+        area: findSheetHeaderIndex(normalizedHeaders, ['area','location']),
+        contact: findSheetHeaderIndex(normalizedHeaders, ['contact #','contact','contact number','phone','mobile']),
+        accountId: findSheetHeaderIndex(normalizedHeaders, ['account id','accountid','account','acct id']),
+        agency: findSheetHeaderIndex(normalizedHeaders, ['agency','agencies']),
+        status: findSheetHeaderIndex(normalizedHeaders, ['status','state']),
+        hub: findSheetHeaderIndex(normalizedHeaders, ['hub','hubs','branch','branch name'])
+      };
+      riders.hasHubColumn = index.hub >= 0;
+
+      const getCell = (values, i) => i >= 0 && values[i] !== undefined ? values[i].trim() : '';
+
+      riders.allRows = dataRows.map(values => ({
+        riderName: getCell(values, index.riderName),
+        area: getCell(values, index.area),
+        contact: getCell(values, index.contact),
+        accountId: getCell(values, index.accountId),
+        agency: getCell(values, index.agency),
+        status: getCell(values, index.status),
+        hub: riders.hasHubColumn ? getCell(values, index.hub) : ''
+      })).filter(row => row.riderName || row.area || row.accountId || row.agency || row.status || row.hub);
+
+      statusEl.textContent = `Loaded ${riders.allRows.length} rider records`;
+      renderRidersStats();
+      renderRidersRows();
+    }catch(err){
+      console.error(err);
+      statusEl.innerHTML = '<span class="error" style="color:var(--brick);">Could not load the Google Sheet.</span>';
+      $('#ridersRows').innerHTML = '<tr><td colspan="6" class="muted">No data available.</td></tr>';
+      $('#ridersStatsRow').innerHTML = '';
+    }
+  }
+
+  function getFilteredRiders(){
+    if(!riders.hasHubColumn) return riders.allRows;
+    const target = riders.currentHub.toLowerCase();
+    return riders.allRows.filter(row => {
+      const hubValue = String(row.hub||'').toLowerCase();
+      return hubValue.includes(target) || hubValue === target;
+    });
+  }
+
+  function renderRidersStats(){
+    const wrap = $('#ridersStatsRow');
+    if(!wrap) return;
+    const rows = getFilteredRiders();
+    const active = rows.filter(r => String(r.status||'').trim().toLowerCase() === 'active').length;
+    const suspended = rows.filter(r => String(r.status||'').trim().toLowerCase() === 'suspended').length;
+    const agencies = new Set(rows.map(r=>String(r.agency||'').trim()).filter(Boolean)).size;
+    const stats = [
+      {label:'Riders', value: rows.length, cls:''},
+      {label:'Active', value: active, cls:'teal'},
+      {label:'Suspended', value: suspended, cls:'brick'},
+      {label:'Agencies', value: agencies, cls:''},
+    ];
+    wrap.innerHTML = stats.map((s,idx)=>`
+      <div class="stat-card animate-in delay-${idx+1}">
+        <div class="stat-label">${s.label}</div>
+        <div class="stat-value ${s.cls}" data-count="${s.value}">0</div>
+      </div>
+    `).join('');
+    $$('#ridersStatsRow .stat-value').forEach(el=>{
+      const target = el.getAttribute('data-count');
+      animateCountUp(el, target, false);
+    });
+  }
+
+  function renderRidersRows(){
+    const tbody = $('#ridersRows');
+    if(!tbody) return;
+    let rows = getFilteredRiders();
+    if(riders.search){
+      const q = riders.search.toLowerCase();
+      rows = rows.filter(r =>
+        String(r.riderName||'').toLowerCase().includes(q) ||
+        String(r.area||'').toLowerCase().includes(q) ||
+        String(r.agency||'').toLowerCase().includes(q) ||
+        String(r.accountId||'').toLowerCase().includes(q) ||
+        String(r.contact||'').toLowerCase().includes(q)
+      );
+    }
+    if(rows.length === 0){
+      tbody.innerHTML = '<tr><td colspan="6" class="muted">No rider records found for this hub.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(r => {
+      const statusRaw = escapeHtml2(r.status||'');
+      const statusNorm = String(r.status||'').trim().toLowerCase();
+      const chipClass = statusNorm === 'active' ? 'status-active' : (statusNorm === 'suspended' ? 'status-suspended' : '');
+      return `
+        <tr>
+          <td class="rider-cell"><b>${escapeHtml2(r.riderName)}</b></td>
+          <td>${escapeHtml2(r.area)}</td>
+          <td>${escapeHtml2(r.contact)}</td>
+          <td>${escapeHtml2(r.accountId)}</td>
+          <td>${escapeHtml2(r.agency)}</td>
+          <td><span class="status-chip ${chipClass}">${statusRaw}</span></td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function openRidersModal(){
+    $('#ridersOverlay').classList.add('show');
+    $('#ridersSearch').value = '';
+    riders.search = '';
+    const statusEl = $('#ridersStatus');
+    statusEl.textContent = 'Loading sheet…';
+    $('#ridersRows').innerHTML = '<tr><td colspan="6" class="muted">Loading...</td></tr>';
+    loadRidersSheet();
+  }
+
+  function closeRidersModal(){
+    $('#ridersOverlay').classList.remove('show');
+  }
+
   function closeSettingsMenu(){
     const menu = $('#settingsMenu');
     if(menu) menu.parentElement.classList.remove('open');
@@ -988,9 +1180,9 @@ function animateCountUp(el, target, isPct){
       closeSettingsMenu();
       openDownloadModal();
     });
-    $('#openRidersPageBtn').addEventListener('click', ()=>{
+$('#openRidersPageBtn').addEventListener('click', ()=>{
       closeSettingsMenu();
-      window.open('riders-agency.html', '_blank', 'noopener,noreferrer');
+      openRidersModal();
     });
     $('#cancelUpload').addEventListener('click', closeModal);
     $('#weekPrevBtn').addEventListener('click', ()=>{
@@ -1004,9 +1196,27 @@ function animateCountUp(el, target, isPct){
     $('#downloadOverlay').addEventListener('click', e=>{ if(e.target.id==='downloadOverlay') closeDownloadModal(); });
     $('#overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') closeModal(); });
 
-    $('#downloadHubSelect').addEventListener('change', populateDownloadWeekOptions);
+$('#downloadHubSelect').addEventListener('change', populateDownloadWeekOptions);
     $('#cancelDownload').addEventListener('click', closeDownloadModal);
     $('#confirmDownload').addEventListener('click', downloadRecords);
+
+    // Riders & Agency modal events
+    $('#closeRiders').addEventListener('click', closeRidersModal);
+    $('#ridersOverlay').addEventListener('click', e=>{ if(e.target.id==='ridersOverlay') closeRidersModal(); });
+    $('#ridersSearch').addEventListener('input', e=>{
+      riders.search = e.target.value;
+      renderRidersRows();
+    });
+    $$('#ridersHubTabs .riders-tab-btn').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        if(btn.dataset.hub === riders.currentHub) return;
+        riders.currentHub = btn.dataset.hub;
+        $$('#ridersHubTabs .riders-tab-btn').forEach(b=>b.classList.toggle('active', b===btn));
+        $('#ridersStatus').textContent = 'Loading sheet…';
+        $('#ridersRows').innerHTML = '<tr><td colspan="6" class="muted">Loading...</td></tr>';
+        await loadRidersSheet();
+      });
+    });
 
     $('#fileInput').addEventListener('change', e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); });
     $('#dropZone').addEventListener('dragover', e=>{ e.preventDefault(); $('#dropZone').classList.add('drag'); });

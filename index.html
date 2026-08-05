@@ -152,6 +152,43 @@
   </div>
 </div>
 
+<!-- Riders & Agency modal (single page) -->
+<div class="overlay" id="ridersOverlay">
+  <div class="modal modal-wide">
+    <h3>Riders &amp; Agency per Hub</h3>
+    <p class="hint">Data is loaded from your Google Sheet and split by hub.</p>
+    <div class="riders-meta">
+      <div class="riders-tabs" id="ridersHubTabs">
+        <button class="riders-tab-btn active" data-hub="Buguias" type="button">Buguias</button>
+        <button class="riders-tab-btn" data-hub="Bauko" type="button">Bauko</button>
+      </div>
+      <div class="status-box" id="ridersStatus">Loading sheet…</div>
+    </div>
+    <div class="riders-stats" id="ridersStatsRow"></div>
+    <div class="riders-search-row">
+      <input type="text" class="riders-search" id="ridersSearch" placeholder="Search rider, area, agency or account ID…">
+    </div>
+    <div class="riders-table-wrap">
+      <table class="riders-table">
+        <thead>
+          <tr>
+            <th>Rider Name</th>
+            <th>Area</th>
+            <th>Contact #</th>
+            <th>Account ID</th>
+            <th>Agency</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="ridersRows"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-primary" id="closeRiders">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Firebase Config (Standard Script) -->
 <script src="firebase-config.js"></script>
 
