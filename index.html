@@ -14,32 +14,20 @@
 <div class="topband">
   <div class="topband-inner">
     <div class="topband-left">
-      <div class="settings-menu">
-        <button class="settings-btn" id="settingsToggle" title="Open options" aria-label="Open options" type="button">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v2"/><path d="M12 19v2"/><path d="M4.2 7.2l1.4 1.4"/><path d="M18.4 15.4l1.4 1.4"/><path d="M3 12h2"/><path d="M19 12h2"/><path d="M4.2 16.8l1.4-1.4"/><path d="M18.4 8.6l1.4-1.4"/><circle cx="12" cy="12" r="3.5"/></svg>
-        </button>
-        <div class="settings-menu-panel" id="settingsMenu">
-          <button class="settings-item" id="openUploadBtn" type="button">
-            <span>Upload manifest</span>
-          </button>
-          <button class="settings-item" id="deleteDateMenuBtn" type="button">
-            <span>Delete selected date</span>
-          </button>
-          <button class="settings-item" id="downloadRecordsBtn" type="button">
-            <span>Download records</span>
-          </button>
-<button class="settings-item" id="openRidersPageBtn" type="button">
-            <span>Riders &amp; Agency per hub</span>
-          </button>
-          <button class="settings-item" id="openLossReportBtn" type="button">
-            <span>Loss Report per hub</span>
-          </button>
-          <button class="settings-item" id="themeToggle" type="button">
-            <span>Dark mode</span>
-            <span class="settings-pill" id="themeToggleState">Off</span>
-          </button>
-        </div>
-      </div>
+<button class="wheel-btn" id="settingsToggle" title="Open options" aria-label="Open options menu" type="button">
+        <svg class="car-wheel-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="8.5"/>
+          <circle cx="12" cy="12" r="3"/>
+          <line x1="12" y1="3.5" x2="12" y2="7"/>
+          <line x1="12" y1="17" x2="12" y2="20.5"/>
+          <line x1="3.5" y1="12" x2="7" y2="12"/>
+          <line x1="17" y1="12" x2="20.5" y2="12"/>
+          <line x1="6" y1="6" x2="8.4" y2="8.4"/>
+          <line x1="15.6" y1="15.6" x2="18" y2="18"/>
+          <line x1="18" y1="6" x2="15.6" y2="8.4"/>
+          <line x1="8.4" y1="15.6" x2="6" y2="18"/>
+        </svg>
+      </button>
       <div>
         <p class="brand-eyebrow">LG'S FLEET VIEW</p>
         <h1 class="brand-title">Dispatch Board</h1>
@@ -86,6 +74,36 @@
 </footer>
 
 <div class="toast" id="toast"></div>
+
+<!-- Wheel side drawer -->
+<div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
+<aside class="drawer" id="settingsDrawer" aria-hidden="true">
+  <div class="drawer-head">
+    <h3>Options</h3>
+    <button class="drawer-close" id="drawerClose" type="button" aria-label="Close options">×</button>
+  </div>
+  <div class="drawer-body">
+    <button class="drawer-item" id="openUploadBtn" type="button">
+      <span>Upload manifest</span>
+    </button>
+    <button class="drawer-item" id="deleteDateMenuBtn" type="button">
+      <span>Delete selected date</span>
+    </button>
+    <button class="drawer-item" id="downloadRecordsBtn" type="button">
+      <span>Download records</span>
+    </button>
+    <button class="drawer-item" id="openRidersPageBtn" type="button">
+      <span>Riders &amp; Agency per hub</span>
+    </button>
+    <button class="drawer-item" id="openLossReportBtn" type="button">
+      <span>Loss Report per hub</span>
+    </button>
+    <button class="drawer-item drawer-item-theme" id="themeToggle" type="button">
+      <span>Dark mode</span>
+      <span class="settings-pill" id="themeToggleState">Off</span>
+    </button>
+  </div>
+</aside>
 
 <!-- Upload modal -->
 <div class="overlay" id="overlay">

@@ -1172,9 +1172,14 @@ function escapeHtml2(s){
     $('#ridersOverlay').classList.remove('show');
   }
 
-  function closeSettingsMenu(){
-    const menu = $('#settingsMenu');
-    if(menu) menu.parentElement.classList.remove('open');
+function closeSettingsMenu(){
+    const drawer = $('#settingsDrawer');
+    const backdrop = $('#drawerBackdrop');
+    const wheel = $('#settingsToggle');
+    if(drawer) drawer.classList.remove('open');
+    if(drawer) drawer.setAttribute('aria-hidden','true');
+    if(backdrop) backdrop.hidden = true;
+    if(wheel) wheel.classList.remove('open');
   }
 
   function wireStaticEvents(){
@@ -1191,13 +1196,88 @@ function escapeHtml2(s){
       await refreshView();
     });
 
-    $('#settingsToggle').addEventListener('click', e=>{
+function openSettingsMenu(){
+      const drawer = $('#settingsDrawer');
+      const backdrop = $('#drawerBackdrop');
+      const wheel = $('#settingsToggle');
+      if(drawer) drawer.classList.add('open');
+      if(drawer) drawer.setAttribute('aria-hidden','false');
+      if(backdrop) backdrop.hidden = false;
+      if(wheel) wheel.classList.add('open');
+    }
+
+const wheelBtn = $('#settingsToggle');
+    wheelBtn.addEventListener('click', e=>{
       e.stopPropagation();
-      $('#settingsMenu').parentElement.classList.toggle('open');
+      const drawer = $('#settingsDrawer');
+      if(drawer && drawer.classList.contains('open')) closeSettingsMenu();
+      else openSettingsMenu();
     });
-    document.addEventListener('click', e=>{
-      if(!e.target.closest('.settings-menu')) closeSettingsMenu();
-    });
+
+    /* ---- Drag the wheel to pull the option drawer open (from the left) ---- */
+    let dragState = null;
+    const wheel = wheelBtn;
+    const drawerEl = $('#settingsDrawer');
+    const backdropEl = $('#drawerBackdrop');
+
+    function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
+
+    function onDragStart(e){
+      if(drawerEl && drawerEl.classList.contains('open')) return; // already open
+      const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
+      dragState = { startX: pt.clientX, startY: pt.clientY, moved:false };
+      wheel.classList.add('dragging');
+      wheel.classList.remove('open');
+      document.body.style.userSelect = 'none';
+    }
+    function onDragMove(e){
+      if(!dragState) return;
+      const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
+      const dx = pt.clientX - dragState.startX;
+      const dy = pt.clientY - dragState.startY;
+      // Require a mostly-horizontal drag toward the right to pull the left drawer open
+      if(!dragState.moved && Math.abs(dx) > 6 && Math.abs(dx) > Math.abs(dy)){
+        dragState.moved = true;
+      }
+      if(!dragState.moved) return;
+      e.preventDefault();
+      const travel = clamp(dx, 0, 300);
+      if(drawerEl){
+        drawerEl.style.transition = 'none';
+        drawerEl.style.transform = `translateX(${-300 + travel}px)`;
+      }
+      if(backdropEl){
+        backdropEl.hidden = false;
+        backdropEl.style.opacity = 0.45 * (travel / 300);
+      }
+    }
+    function onDragEnd(e){
+      if(!dragState) return;
+      const pt = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0] : e;
+      const dx = pt ? pt.clientX - dragState.startX : 0;
+      const shouldOpen = dragState.moved && dx > 120;
+      dragState = null;
+      wheel.classList.remove('dragging');
+      document.body.style.userSelect = '';
+      if(drawerEl){
+        drawerEl.style.transition = '';
+        drawerEl.style.transform = '';
+      }
+      if(backdropEl) backdropEl.style.opacity = '';
+      if(shouldOpen) openSettingsMenu();
+      else closeSettingsMenu();
+    }
+
+    wheel.addEventListener('mousedown', onDragStart);
+    window.addEventListener('mousemove', onDragMove);
+    window.addEventListener('mouseup', onDragEnd);
+    wheel.addEventListener('touchstart', onDragStart, {passive:true});
+    window.addEventListener('touchmove', onDragMove, {passive:false});
+    window.addEventListener('touchend', onDragEnd);
+    window.addEventListener('touchcancel', onDragEnd);
+
+    $('#drawerClose').addEventListener('click', closeSettingsMenu);
+    $('#drawerBackdrop').addEventListener('click', closeSettingsMenu);
 
     $('#openUploadBtn').addEventListener('click', ()=>{
       closeSettingsMenu();
@@ -1213,7 +1293,7 @@ function escapeHtml2(s){
     });
 $('#openRidersPageBtn').addEventListener('click', ()=>{
       closeSettingsMenu();
-      openRidersModal();
+      window.location.href = 'riders-agency.html';
     });
     $('#openLossReportBtn').addEventListener('click', ()=>{
       closeSettingsMenu();
