@@ -268,14 +268,15 @@
     };
   }
 
-  /* ---------------- Theme ---------------- */
-  async function loadTheme(){
+/* ---------------- Theme ---------------- */
+  const THEME_KEY = 'hub-theme';
+  function loadTheme(){
     try{
-      const r = await storage.get('ui-theme', false);
-      return r ? JSON.parse(r.value) : 'light';
+      const saved = localStorage.getItem(THEME_KEY);
+      return saved ? JSON.parse(saved) : 'light';
     }catch(e){ return 'light'; }
   }
-  async function saveTheme(mode){ try{ await storage.set('ui-theme', JSON.stringify(mode), false); }catch(e){} }
+  function saveTheme(mode){ try{ localStorage.setItem(THEME_KEY, JSON.stringify(mode)); }catch(e){} }
   function applyTheme(mode){
     document.body.classList.toggle('dark', mode==='dark');
     const themeState = $('#themeToggleState');

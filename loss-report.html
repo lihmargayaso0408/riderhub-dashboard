@@ -15,8 +15,6 @@
     .page-head p{margin:4px 0 0;color:var(--text-dim);font-size:13px;}
     .status-box{background:var(--card);border:1px solid var(--line-2);border-radius:6px;padding:12px 14px;font-size:13px;color:var(--text-dim);}
     .page-actions{display:flex;align-items:center;gap:10px;}
-    .theme-toggle{border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 12px;border-radius:999px;cursor:pointer;font-size:13px;transition:background .15s ease,border-color .15s ease,color .15s ease;}
-    .theme-toggle:hover{background:var(--hover);}
     .back-link{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 12px;border-radius:999px;cursor:pointer;font-size:13px;text-decoration:none;transition:background .15s ease,border-color .15s ease;}
     .back-link:hover{background:var(--hover);}
     .tabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
@@ -67,7 +65,6 @@
       </div>
       <div class="page-actions">
         <a class="back-link" href="index.html">← Back to Dispatch Board</a>
-        <button class="theme-toggle" id="themeToggle" type="button">Dark mode</button>
         <div class="status-box" id="sheetStatus">Loading sheet…</div>
       </div>
     </div>
@@ -114,7 +111,6 @@
     const statsRowEl = document.getElementById('statsRow');
 const searchEl = document.getElementById('searchInput');
     const monthFilterEl = document.getElementById('monthFilter');
-    const themeToggleEl = document.getElementById('themeToggle');
     const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
     const sortableHeaders = Array.from(document.querySelectorAll('th[data-sort]'));
 
@@ -367,24 +363,23 @@ function getFilteredRows() {
       }).join('');
     }
 
-    function getSavedTheme() {
-      try { return localStorage.getItem('lossReportTheme'); } catch (err) { return null; }
-    }
-
-    function setTheme(theme) {
-      const isDark = theme === 'dark';
+// Apply the shared theme (controlled only from the dashboard's option/settings drawer)
+    function applySavedTheme() {
+      const savedTheme = getSavedTheme();
+      const isDark = savedTheme === 'dark' || (savedTheme === null && window.matchMedia('(prefers-color-scheme: dark)').matches);
       document.body.classList.toggle('dark', isDark);
-      themeToggleEl.textContent = isDark ? 'Light mode' : 'Dark mode';
-      try { localStorage.setItem('lossReportTheme', theme); } catch (err) {}
     }
 
-    themeToggleEl.addEventListener('click', () => {
-      const nextTheme = document.body.classList.contains('dark') ? 'light' : 'dark';
-      setTheme(nextTheme);
-    });
+    function getSavedTheme() {
+      try {
+        const raw = localStorage.getItem('hub-theme');
+        if (raw === null || raw === undefined) return null;
+        // The dashboard stores the theme as a JSON string (e.g. "\"dark\""), so try to parse it.
+        try { return JSON.parse(raw); } catch (e) { return raw; }
+      } catch (err) { return null; }
+    }
 
-    const savedTheme = getSavedTheme();
-    setTheme(savedTheme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+    applySavedTheme();
 
 searchEl.addEventListener('input', e => { search = e.target.value; renderRows(); });
 

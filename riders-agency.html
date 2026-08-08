@@ -15,8 +15,6 @@
     .page-head p{margin:4px 0 0;color:var(--text-dim);font-size:13px;}
     .status-box{background:var(--card);border:1px solid var(--line-2);border-radius:6px;padding:12px 14px;font-size:13px;color:var(--text-dim);}
     .page-actions{display:flex;align-items:center;gap:10px;}
-    .theme-toggle{border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 12px;border-radius:999px;cursor:pointer;font-size:13px;transition:background .15s ease,border-color .15s ease,color .15s ease;}
-    .theme-toggle:hover{background:var(--hover);}
     .back-link{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 12px;border-radius:999px;cursor:pointer;font-size:13px;text-decoration:none;transition:background .15s ease,border-color .15s ease;}
     .back-link:hover{background:var(--hover);}
     .tabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
@@ -34,15 +32,29 @@
     .stat-value.amber{color:var(--amber-deep);}
     .search-row{margin-bottom:12px;}
 .search-row input{width:100%;max-width:340px;padding:9px 12px;border:1px solid var(--line);border-radius:3px;font-family:'IBM Plex Sans';font-size:13px;background:var(--card);color:var(--text);}
-    .table-card{background:var(--card);border:1px solid var(--line-2);border-radius:8px;padding:16px;overflow:auto;position:relative;cursor:grab;touch-action:pan-y;user-select:none;-webkit-user-select:none;scrollbar-width:thin;}
+    .table-card{background:var(--card);border:1px solid var(--line-2);border-radius:8px;padding:16px;overflow:auto;position:relative;cursor:grab;touch-action:pan-x pan-y;user-select:none;-webkit-user-select:none;scrollbar-width:thin;}
+    .table-card::-webkit-scrollbar{height:12px;width:12px;}
+    .table-card::-webkit-scrollbar-track{background:var(--line-2);border-radius:999px;}
+    .table-card::-webkit-scrollbar-thumb{background:var(--amber);border-radius:999px;border:3px solid var(--line-2);}
+    body.dark .table-card::-webkit-scrollbar-track{background:var(--line);}
+    body.dark .table-card::-webkit-scrollbar-thumb{border-color:var(--line);}
     .table-card.dragging{cursor:grabbing;}
-    .table-card.dragging ::-webkit-scrollbar{height:0;}
     .table-card.dragging *{pointer-events:none;}
     .table-card .drag-fade{position:absolute;top:0;right:0;bottom:0;width:34px;pointer-events:none;background:linear-gradient(90deg,transparent,var(--card));opacity:0;transition:opacity .2s ease;z-index:2;}
     body.dark .table-card .drag-fade{background:linear-gradient(90deg,transparent,var(--card));}
     .table-card .drag-hint{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);pointer-events:none;background:var(--ink);color:#fff;font-size:11px;font-weight:600;letter-spacing:.04em;padding:6px 14px;border-radius:999px;opacity:0;transition:opacity .25s ease;z-index:3;white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,.28);display:flex;align-items:center;gap:6px;}
     .table-card .drag-hint svg{width:12px;height:12px;}
-table{width:100%;border-collapse:collapse;font-size:14px;min-width:900px;}
+    /* Horizontal scroll control (visible on all breakpoints) */
+    .h-scroll-control{display:flex;align-items:center;gap:10px;margin-top:12px;width:100%;}
+    .h-scroll-btn{flex-shrink:0;width:34px;height:34px;border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s ease,border-color .15s ease,transform .12s ease,opacity .15s ease;touch-action:manipulation;}
+    .h-scroll-btn:hover{background:var(--hover);border-color:var(--amber);}
+    .h-scroll-btn:active{transform:scale(.9);}
+    .h-scroll-btn:disabled{opacity:.35;cursor:not-allowed;transform:none;}
+    .h-scroll-btn svg{width:18px;height:18px;}
+    .h-scroll-track{flex:1;height:8px;border-radius:999px;background:var(--line-2);position:relative;cursor:pointer;touch-action:pan-y;border:1px solid var(--line);}
+    .h-scroll-thumb{position:absolute;top:1px;bottom:1px;left:0;width:40px;border-radius:999px;background:var(--amber);transition:background .15s ease;cursor:grab;}
+    .h-scroll-thumb.dragging{cursor:grabbing;background:var(--amber-deep);}
+    table{width:100%;border-collapse:collapse;font-size:14px;min-width:900px;}
     th, td{padding:12px 14px;border-bottom:1px solid var(--line-2);text-align:left;white-space:nowrap;}
 th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);cursor:pointer;user-select:none;}
     th:hover{color:var(--text);}
@@ -69,7 +81,6 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text
       </div>
       <div class="page-actions">
         <a class="back-link" href="index.html">← Back to Dispatch Board</a>
-        <button class="theme-toggle" id="themeToggle" type="button">Dark mode</button>
         <div class="status-box" id="sheetStatus">Loading sheet…</div>
       </div>
     </div>
@@ -101,6 +112,17 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text
         Swipe to see more
       </div>
     </div>
+    <div class="h-scroll-control" id="hScrollControl">
+      <button class="h-scroll-btn" id="hScrollPrev" type="button" aria-label="Scroll left">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+      </button>
+      <div class="h-scroll-track" id="hScrollTrack">
+        <div class="h-scroll-thumb" id="hScrollThumb"></div>
+      </div>
+      <button class="h-scroll-btn" id="hScrollNext" type="button" aria-label="Scroll right">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+    </div>
   </div>
 
   <script>
@@ -113,7 +135,6 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text
     const rowsEl = document.getElementById('sheetRows');
     const statsRowEl = document.getElementById('statsRow');
     const searchEl = document.getElementById('searchInput');
-    const themeToggleEl = document.getElementById('themeToggle');
     const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
     const sortableHeaders = Array.from(document.querySelectorAll('th[data-sort]'));
 
@@ -300,24 +321,23 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text
       }).join('');
     }
 
-    function getSavedTheme() {
-      try { return localStorage.getItem('ridersAgencyTheme'); } catch (err) { return null; }
-    }
-
-    function setTheme(theme) {
-      const isDark = theme === 'dark';
+    // Apply the shared theme (controlled only from the dashboard's option/settings drawer)
+    function applySavedTheme() {
+      const savedTheme = getSavedTheme();
+      const isDark = savedTheme === 'dark' || (savedTheme === null && window.matchMedia('(prefers-color-scheme: dark)').matches);
       document.body.classList.toggle('dark', isDark);
-      themeToggleEl.textContent = isDark ? 'Light mode' : 'Dark mode';
-      try { localStorage.setItem('ridersAgencyTheme', theme); } catch (err) {}
     }
 
-    themeToggleEl.addEventListener('click', () => {
-      const nextTheme = document.body.classList.contains('dark') ? 'light' : 'dark';
-      setTheme(nextTheme);
-    });
+    function getSavedTheme() {
+      try {
+        const raw = localStorage.getItem('hub-theme');
+        if (raw === null || raw === undefined) return null;
+        // The dashboard stores the theme as a JSON string (e.g. "\"dark\""), so try to parse it.
+        try { return JSON.parse(raw); } catch (e) { return raw; }
+      } catch (err) { return null; }
+    }
 
-    const savedTheme = getSavedTheme();
-    setTheme(savedTheme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+    applySavedTheme();
 
     searchEl.addEventListener('input', e => { search = e.target.value; renderRows(); });
 
@@ -410,12 +430,103 @@ if(!dragState2.moved && Math.abs(dx) > 4 && Math.abs(dx) > Math.abs(dy)) {
       window.addEventListener('resize', updateHintVisibility);
     }
 
-    // Re-evaluate the hint after the sheet data renders
+// Re-evaluate the hint and scroll control after the sheet data renders
     const originalRenderRows = renderRows;
     renderRows = function () {
       originalRenderRows.apply(this, arguments);
-      setTimeout(updateHintVisibility, 0);
+      setTimeout(function () { updateHintVisibility(); updateScrollControl(); }, 0);
     };
+
+    /* ---- Horizontal scroll control (arrows + draggable thumb) ---- */
+    const hScrollControl = document.getElementById('hScrollControl');
+    const hScrollPrev = document.getElementById('hScrollPrev');
+    const hScrollNext = document.getElementById('hScrollNext');
+    const hScrollTrack = document.getElementById('hScrollTrack');
+    const hScrollThumb = document.getElementById('hScrollThumb');
+    let thumbDragState = null;
+
+    function updateScrollControl() {
+      if (!hScrollControl || !tableCardEl) return;
+      const overflows = tableOverflows();
+      hScrollControl.style.display = overflows ? 'flex' : 'none';
+      if (!overflows) return;
+
+      const maxLeft = tableCardEl.scrollWidth - tableCardEl.clientWidth;
+      const trackWidth = hScrollTrack.clientWidth;
+      const minThumb = 40;
+      const thumbWidth = Math.max(minThumb, Math.min(trackWidth, (tableCardEl.clientWidth / tableCardEl.scrollWidth) * trackWidth));
+      hScrollThumb.style.width = thumbWidth + 'px';
+
+      const maxThumbLeft = trackWidth - thumbWidth;
+      const ratio = maxLeft > 0 ? tableCardEl.scrollLeft / maxLeft : 0;
+      hScrollThumb.style.left = (ratio * maxThumbLeft) + 'px';
+
+      hScrollPrev.disabled = tableCardEl.scrollLeft <= 0;
+      hScrollNext.disabled = tableCardEl.scrollLeft >= maxLeft - 1;
+    }
+
+function scrollTableBy(delta) {
+      if (!tableCardEl) return;
+      tableCardEl.scrollBy({ left: delta, behavior: 'smooth' });
+    }
+
+    function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+    if (hScrollPrev && hScrollNext && hScrollTrack && hScrollThumb) {
+      hScrollPrev.addEventListener('click', function () { scrollTableBy(-320); });
+      hScrollNext.addEventListener('click', function () { scrollTableBy(320); });
+
+      // Click on track to jump
+      hScrollTrack.addEventListener('click', function (e) {
+        if (e.target === hScrollThumb) return;
+        const rect = hScrollTrack.getBoundingClientRect();
+        const ratio = clamp((e.clientX - rect.left) / rect.width, 0, 1);
+        tableCardEl.scrollLeft = ratio * (tableCardEl.scrollWidth - tableCardEl.clientWidth);
+        updateScrollControl();
+      });
+
+      // Drag the thumb
+      function onThumbStart(e) {
+        const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
+        thumbDragState = { startX: pt.clientX, startLeft: tableCardEl.scrollLeft };
+        hScrollThumb.classList.add('dragging');
+        document.body.style.userSelect = 'none';
+        document.body.style.webkitUserSelect = 'none';
+        if (e.cancelable) e.preventDefault();
+      }
+      function onThumbMove(e) {
+        if (!thumbDragState) return;
+        const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
+        const dx = pt.clientX - thumbDragState.startX;
+        const trackWidth = hScrollTrack.clientWidth;
+        const thumbWidth = hScrollThumb.offsetWidth;
+        const maxThumbLeft = trackWidth - thumbWidth;
+        const maxLeft = tableCardEl.scrollWidth - tableCardEl.clientWidth;
+        const ratio = maxThumbLeft > 0 ? dx / maxThumbLeft : 0;
+        tableCardEl.scrollLeft = thumbDragState.startLeft + ratio * maxLeft;
+        updateScrollControl();
+        if (e.cancelable) e.preventDefault();
+      }
+      function onThumbEnd() {
+        if (!thumbDragState) return;
+        thumbDragState = null;
+        hScrollThumb.classList.remove('dragging');
+        document.body.style.userSelect = '';
+        document.body.style.webkitUserSelect = '';
+      }
+
+      hScrollThumb.addEventListener('mousedown', onThumbStart);
+      window.addEventListener('mousemove', onThumbMove);
+      window.addEventListener('mouseup', onThumbEnd);
+      hScrollThumb.addEventListener('touchstart', onThumbStart, { passive: false });
+      window.addEventListener('touchmove', onThumbMove, { passive: false });
+      window.addEventListener('touchend', onThumbEnd);
+      window.addEventListener('touchcancel', onThumbEnd);
+
+      // Keep control in sync while the table scrolls
+      tableCardEl.addEventListener('scroll', updateScrollControl);
+      window.addEventListener('resize', updateScrollControl);
+    }
 
     loadSheet();
   </script>
