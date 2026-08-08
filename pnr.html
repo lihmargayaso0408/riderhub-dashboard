@@ -81,6 +81,7 @@
     </div>
     <div class="tabs" id="hubTabs">
       <button class="tab-btn active" data-hub="Buguias" type="button">Buguias</button>
+      <button class="tab-btn" data-hub="MB Mankayan" type="button">MB Mankayan</button>
       <button class="tab-btn" data-hub="Bauko" type="button">Bauko</button>
     </div>
     <div class="stats-row" id="statsRow"></div>
@@ -327,12 +328,14 @@ if (selectedMonth) {
       const totalRecords = rows.length;
       const solved = rows.filter(r => normalizeStatus(r.status) === 'SOLVED').length;
       const notSolved = rows.filter(r => normalizeStatus(r.status) === 'NOTSOLVED').length;
-      const totalAmount = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+const totalAmount = rows
+        .filter(r => normalizeStatus(r.status) === 'NOTSOLVED')
+        .reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
       const stats = [
         { label: 'PNR records', value: totalRecords, cls: '' },
         { label: 'Solved', value: solved, cls: 'teal' },
         { label: 'Not solved', value: notSolved, cls: 'brick' },
-        { label: 'Total amount (₱)', value: fmtMoney(totalAmount), cls: 'amber' },
+        { label: 'Total not-solved amount (₱)', value: fmtMoney(totalAmount), cls: 'amber' },
       ];
       statsRowEl.innerHTML = stats.map((s, idx) => `
         <div class="stat-card animate-in delay-${idx + 1}">
@@ -468,5 +471,8 @@ const params = new URLSearchParams(window.location.search);
 
     loadSheet();
   </script>
+
+  <!-- Shared Option Button / Options drawer (appears on all pages) -->
+  <script src="options-drawer.js" defer></script>
 </body>
 </html>

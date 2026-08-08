@@ -45,10 +45,14 @@
     .error{color:var(--brick);}
     .num{font-family:'IBM Plex Mono',monospace;text-align:right;}
     .money{font-family:'IBM Plex Mono',monospace;text-align:right;font-weight:600;}
-    .loss-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;}
+.loss-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;}
     .loss-Driver{background:rgba(239,68,68,.12);color:#ef4444;}
     .loss-Hub{background:rgba(232,163,61,.16);color:#c97f1e;}
     .loss-FM{background:rgba(59,130,246,.14);color:#3b82f6;}
+    .status-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;}
+    .status-SOLVED{background:rgba(16,185,129,.16);color:#10b981;}
+    .status-NOTSOLVED{background:rgba(239,68,68,.14);color:#ef4444;}
+    .status-NOSTATUS{background:rgba(59,130,246,.14);color:#3b82f6;}
     .animate-in{animation:fadeUp .5s cubic-bezier(.22,.61,.36,1) both;}
     .delay-1{animation-delay:.05s;}
     .delay-2{animation-delay:.1s;}
@@ -93,8 +97,9 @@
 <th data-sort="total_cogs_usd">Total COGS (₱)</th>
             <th data-sort="RR_identifier">RR Identifier</th>
             <th data-sort="sample">Sample</th>
-            <th data-sort="RTS_identifier">RTS Identifier</th>
+<th data-sort="RTS_identifier">RTS Identifier</th>
             <th data-sort="Mother_hub_for_MB">Mother Hub for MB</th>
+            <th data-sort="status">Status</th>
           </tr>
         </thead>
         <tbody id="lossRows"></tbody>
@@ -114,10 +119,11 @@ const searchEl = document.getElementById('searchInput');
     const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
     const sortableHeaders = Array.from(document.querySelectorAll('th[data-sort]'));
 
-    let allRows = [];
+let allRows = [];
     let currentHub = 'Buguias';
     let search = '';
     let selectedMonth = '';
+    let selectedStatus = 'NOTSOLVED'; // default filter: Not Solved
     let sortKey = 'report_date';
     let sortDir = 'desc';
 
@@ -243,8 +249,12 @@ const USD_TO_PHP = 56.0; // Exchange rate: 1 USD = ₱56 (adjust as needed)
           total_cogs_usd: findHeaderIndex(normalizedHeaders, ['total_cogs_usd','total cogs','cogs','total']),
           RR_identifier: findHeaderIndex(normalizedHeaders, ['rr_identifier','rr','rr id']),
           sample: findHeaderIndex(normalizedHeaders, ['sample']),
-          RTS_identifier: findHeaderIndex(normalizedHeaders, ['rts_identifier','rts','rts id']),
-          Mother_hub_for_MB: findHeaderIndex(normalizedHeaders, ['mother_hub_for_mb','mother hub','mother hub for mb'])
+RTS_identifier: findHeaderIndex(normalizedHeaders, ['rts_identifier','rts','rts id']),
+          Mother_hub_for_MB: findHeaderIndex(normalizedHeaders, ['mother_hub_for_mb','mother hub','mother hub for mb']),
+          status: (function() {
+            const idx = normalizedHeaders.indexOf('status');
+            return idx >= 0 ? idx : findHeaderIndex(normalizedHeaders, ['status']);
+          })()
         };
 
         allRows = dataRows.map(values => ({
@@ -258,8 +268,9 @@ const USD_TO_PHP = 56.0; // Exchange rate: 1 USD = ₱56 (adjust as needed)
           total_cogs_usd: cleanNum(getCell(values, index.total_cogs_usd)),
           RR_identifier: getCell(values, index.RR_identifier),
           sample: getCell(values, index.sample),
-          RTS_identifier: getCell(values, index.RTS_identifier),
-          Mother_hub_for_MB: getCell(values, index.Mother_hub_for_MB)
+RTS_identifier: getCell(values, index.RTS_identifier),
+          Mother_hub_for_MB: getCell(values, index.Mother_hub_for_MB),
+          status: getCell(values, index.status)
         })).filter(row => row.report_date || row.loss_party || row.sample || row.num_loss || row.total_cogs_usd);
 
 populateMonthFilter();
@@ -269,14 +280,26 @@ populateMonthFilter();
       } catch (err) {
         console.error(err);
         statusEl.innerHTML = '<span class="error">Could not load the Loss Report spreadsheet. Check the link and try again.</span>';
-        rowsEl.innerHTML = '<tr><td colspan="12" class="error">No data available.</td></tr>';
+rowsEl.innerHTML = '<tr><td colspan="13" class="error">No data available.</td></tr>';
         statsRowEl.innerHTML = '';
       }
     }
 
+function normalizeStatusVal(status) {
+      return String(status || '').trim().toUpperCase().replace(/[^A-Z]/g, '');
+    }
+
 function getFilteredRows() {
-      if (!selectedMonth) return allRows;
-      return allRows.filter(r => getMonthKey(r.report_date) === selectedMonth);
+      let rows = allRows;
+      if (selectedMonth) {
+        rows = rows.filter(r => getMonthKey(r.report_date) === selectedMonth);
+      }
+      if (selectedStatus === 'SOLVED') {
+        rows = rows.filter(r => normalizeStatusVal(r.status) === 'SOLVED');
+      } else if (selectedStatus === 'NOTSOLVED') {
+        rows = rows.filter(r => normalizeStatusVal(r.status) === 'NOTSOLVED' || normalizeStatusVal(r.status) === '');
+      }
+      return rows;
     }
 
     function applySorting(rows) {
@@ -301,7 +324,7 @@ function getFilteredRows() {
       const totalLoss = rows.reduce((sum, r) => sum + (Number(r.num_loss) || 0), 0);
       const totalCogs = rows.reduce((sum, r) => sum + (Number(r.total_cogs_usd) || 0), 0);
       const driverLoss = rows.filter(r => /driver/i.test(String(r.loss_party || ''))).length;
-      const stats = [
+const stats = [
         { label: 'Loss records', value: totalRecords, cls: '' },
         { label: 'Total units lost', value: totalLoss, cls: 'amber' },
 { label: 'Total COGS (₱)', value: fmtMoney(totalCogs), cls: 'brick' },
@@ -311,15 +334,43 @@ function getFilteredRows() {
         <div class="stat-card animate-in delay-${idx + 1}">
           <div class="stat-label">${s.label}</div>
           <div class="stat-value ${s.cls}">${s.value}</div>
+          ${idx === 2 ? `
+            <select id="statusFilter" class="month-filter" title="Filter by status" style="margin-top:8px;max-width:100%;">
+              <option value="NOTSOLVED" ${selectedStatus === 'NOTSOLVED' ? 'selected' : ''}>Not Solved</option>
+              <option value="SOLVED" ${selectedStatus === 'SOLVED' ? 'selected' : ''}>Solved</option>
+              <option value="" ${selectedStatus === '' ? 'selected' : ''}>All</option>
+            </select>
+          ` : ''}
         </div>
       `).join('');
+
+      // Wire up the status filter (rebind each render to avoid stale listeners)
+      const statusFilterEl = document.getElementById('statusFilter');
+      if (statusFilterEl) {
+        statusFilterEl.onchange = e => {
+          selectedStatus = e.target.value;
+          renderStats();
+          renderRows();
+        };
+      }
     }
 
-    function getLossClass(lossParty) {
+function getLossClass(lossParty) {
       const normalized = String(lossParty || '').toLowerCase();
       if (normalized.includes('driver')) return 'loss-Driver';
       if (normalized.includes('fm')) return 'loss-FM';
       return 'loss-Hub';
+    }
+
+    function getStatusChip(status) {
+      const normalized = String(status || '').trim().toUpperCase().replace(/[^A-Z]/g, '');
+      if (normalized === 'SOLVED') {
+        return `<span class="status-chip status-SOLVED">Solved</span>`;
+      }
+      if (normalized === 'NOTSOLVED') {
+        return `<span class="status-chip status-NOTSOLVED">Not Solved</span>`;
+      }
+      return `<span class="status-chip status-NOSTATUS">No Status</span>`;
     }
 
     function renderRows() {
@@ -333,13 +384,14 @@ function getFilteredRows() {
           String(r.sample || '').toLowerCase().includes(q) ||
           String(r.area_cluster || '').toLowerCase().includes(q) ||
           String(r.RR_identifier || '').toLowerCase().includes(q) ||
-          String(r.RTS_identifier || '').toLowerCase().includes(q) ||
-          String(r.station_name || '').toLowerCase().includes(q)
+String(r.RTS_identifier || '').toLowerCase().includes(q) ||
+          String(r.station_name || '').toLowerCase().includes(q) ||
+          String(r.status || '').toLowerCase().includes(q)
         );
       }
       rows = applySorting(rows);
       if (!rows.length) {
-        rowsEl.innerHTML = '<tr><td colspan="12" class="muted">No loss records found for this hub.</td></tr>';
+        rowsEl.innerHTML = '<tr><td colspan="13" class="muted">No loss records found for this hub.</td></tr>';
         return;
       }
       rowsEl.innerHTML = rows.map(r => {
@@ -358,6 +410,7 @@ function getFilteredRows() {
             <td>${escapeHtml(r.sample)}</td>
             <td>${escapeHtml(r.RTS_identifier)}</td>
             <td>${escapeHtml(r.Mother_hub_for_MB)}</td>
+            <td>${getStatusChip(r.status)}</td>
           </tr>
         `;
       }).join('');
@@ -404,12 +457,15 @@ searchEl.addEventListener('input', e => { search = e.target.value; renderRows();
         currentHub = btn.dataset.hub;
         tabButtons.forEach(b => b.classList.toggle('active', b === btn));
         statusEl.textContent = 'Loading sheet…';
-        rowsEl.innerHTML = '<tr><td colspan="12" class="muted">Loading...</td></tr>';
+rowsEl.innerHTML = '<tr><td colspan="13" class="muted">Loading...</td></tr>';
         await loadSheet();
       });
     });
 
     loadSheet();
   </script>
+
+  <!-- Shared Option Button / Options drawer (appears on all pages) -->
+  <script src="options-drawer.js" defer></script>
 </body>
 </html>
