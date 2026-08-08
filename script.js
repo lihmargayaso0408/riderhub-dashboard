@@ -673,6 +673,7 @@ let groupChartInstance = null;
     {key:'hub', label:'Hub', type:'text', showOnlyAll:true},
     {key:'vehicleType', label:'Vehicle', type:'text'},
     {key:'area', label:'Area', type:'text'},
+    {key:'pnr', label:'PNR', type:'text'},
     {key:'driverGroup', label:'Group', type:'text'},
 {key:'attendDays', label:'Days', type:'num'},
 {key:'avgParcelsPerDay', label:'Parcels/Day', type:'num1'},
