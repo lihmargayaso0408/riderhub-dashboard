@@ -355,7 +355,8 @@ const theme = await loadTheme();
     state.summaries.Bauko = await getSummary('Bauko');
     state.summaries.Buguias = await getSummary('Buguias');
     // Build rider name -> Area lookup from the Riders & Agency sheet
-    areaLookup = await buildAreaLookup();
+areaLookup = await buildAreaLookup();
+    pnrLookup = await buildPnrLookup();
     setActiveTab('All');
     await refreshView();
     wireStaticEvents();
@@ -426,6 +427,17 @@ state.rows = rows;
         const key = String(r.name || '').trim().toLowerCase();
         if(key && areaLookup.has(key)){
           r.area = areaLookup.get(key);
+        }
+      });
+    }
+
+// Populate the PNR count from the PNR Google Sheet by matching rider name + hub + week
+    if(pnrLookup && pnrLookup.size){
+      rows.forEach(r => {
+        const weekKey = (r.snapDate || '');
+        const key = (String(r.name || '').trim().toLowerCase() + '|' + normalizeHub(r.hub) + '|' + String(weekKey).trim()).trim();
+        if(key && pnrLookup.has(key)){
+          r.pnr = pnrLookup.get(key);
         }
       });
     }
@@ -751,8 +763,9 @@ const cols = COLUMNS.filter(c=>!c.showOnlyAll || state.currentHub==='All');
       return '<tr>' + cols.map(c=>{
 if(c.type==='name') return `<td class="name-cell"><b>${escapeHtml(r.name)}</b>${r.id?`<span>#${r.id}</span>`:''}</td>`;
 if(c.type==='pct') return `<td class="num ${(c.key==='deliverySuccessRate' || c.key==='attendanceRate') ? successRateColor(r[c.key]) : ''}">${fmtPct(r[c.key])}</td>`;
-        if(c.type==='num1') return `<td class="num">${(r[c.key]||0).toFixed(1)}</td>`;
+if(c.type==='num1') return `<td class="num">${(r[c.key]||0).toFixed(1)}</td>`;
         if(c.type==='num') return `<td class="num">${fmtNum(r[c.key])}</td>`;
+        if(c.key==='pnr') return `<td class="num">${r[c.key] ? `<a class="pnr-link" href="pnr.html?rider=${encodeURIComponent(r.name)}&hub=${encodeURIComponent(r.hub)}&week=${encodeURIComponent(r.snapDate || '')}" title="Open PNR of Riders">${fmtNum(r[c.key])}</a>` : '<span class="muted">—</span>'}</td>`;
         return `<td>${escapeHtml(r[c.key])}</td>`;
       }).join('') + '</tr>';
     }).join('');
@@ -1010,7 +1023,9 @@ cells.forEach((day, index)=>{
   }
 
 /* ---------------- Riders & Agency modal (single page) ---------------- */
-  const RIDERS_SHEET_ID = '1aGJXuO3tz5oLJyL6piEljz4A6cg6l0cnKvmtIpLkqMI';
+const RIDERS_SHEET_ID = '1aGJXuO3tz5oLJyL6piEljz4A6cg6l0cnKvmtIpLkqMI';
+  const PNR_SHEET_ID = '1aGJXuO3tz5oLJyL6piEljz4A6cg6l0cnKvmtIpLkqMI';
+  const PNR_SHEET_NAME = 'PNR';
   const RIDERS_HUB_SHEET = { Buguias:'Buguias', Bauko:'Bauko' };
 const riders = {
     allRows: [],
@@ -1019,8 +1034,11 @@ const riders = {
     hasHubColumn: false,
   };
 
-  // Lookup of rider name -> Area, built from the Riders & Agency Google Sheet
+// Lookup of rider name -> Area, built from the Riders & Agency Google Sheet
   let areaLookup = new Map();
+
+  // Lookup of rider name+hub -> PNR count, built from the PNR Google Sheet
+  let pnrLookup = new Map();
 
   async function buildAreaLookup(){
     const map = new Map();
@@ -1055,6 +1073,56 @@ const riders = {
         }
       }catch(e){ /* ignore sheet errors */ }
     }
+return map;
+  }
+
+  // Build a lookup of rider name+hub -> total PNR count from the PNR Google Sheet
+  async function buildPnrLookup(){
+    const map = new Map();
+    try{
+      const url = `https://docs.google.com/spreadsheets/d/${PNR_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(PNR_SHEET_NAME)}`;
+      const response = await fetch(url);
+      if(!response.ok) return map;
+      const text = await response.text();
+      const rawLines = text.split(/\r\n|\n|\r/);
+      if(rawLines.length < 2) return map;
+      const parsedLines = rawLines.map(parseSheetCsvLine);
+      const headerRowIndex = parsedLines.findIndex(values => {
+        const normalized = values.map(v => String(v||'').trim().toLowerCase());
+        return normalized.some(h=>['date'].includes(h))
+          && normalized.some(h=>['hub'].includes(h))
+          && normalized.some(h=>['rider','rider name','driver','name'].includes(h));
+      });
+      if(headerRowIndex < 0) return map;
+      const headers = parsedLines[headerRowIndex];
+      const normalizedHeaders = headers.map(h => String(h||'').trim().toLowerCase());
+const dateIdx = findSheetHeaderIndex(normalizedHeaders, ['date']);
+      const nameIdx = findSheetHeaderIndex(normalizedHeaders, ['rider','rider name','driver','name']);
+      const hubIdx = findSheetHeaderIndex(normalizedHeaders, ['hub','branch']);
+      const countIdx = findSheetHeaderIndex(normalizedHeaders, ['count']);
+      for(let i=headerRowIndex+1;i<parsedLines.length;i++){
+        const values = parsedLines[i];
+        if(values.some(c => String(c||'').trim() !== '')){
+          const name = String(values[nameIdx]||'').trim();
+          const hub = hubIdx>=0 ? String(values[hubIdx]||'').trim() : '';
+          const cnt = countIdx>=0 ? (parseFloat(String(values[countIdx]||'').replace(/[^\d.\-]/g,''))||0) : 0;
+          // Determine the Monday-start week that this PNR record belongs to,
+          // so the dashboard can show only the PNRs for the selected week.
+          let week = '';
+          if(dateIdx>=0){
+            const dv = String(values[dateIdx]||'').trim().slice(0,10);
+            const dObj = new Date(dv + 'T00:00:00');
+            if(!isNaN(dObj)){
+              week = toISODate(startOfWeek(dv));
+            }
+          }
+          if(name){
+            const key = (name.toLowerCase().trim() + '|' + normalizeHub(hub) + '|' + week).trim();
+            map.set(key, (map.get(key)||0) + cnt);
+          }
+        }
+      }
+    }catch(e){ /* ignore PNR sheet errors */ }
     return map;
   }
 
@@ -1079,6 +1147,12 @@ function escapeHtml2(s){
     }
     values.push(current);
     return values;
+  }
+
+  // Normalize a hub value from the Google Sheet (e.g. "Bauko Hub") to the
+  // hub key used by the dashboard ("bauko").
+  function normalizeHub(h){
+    return String(h||'').toLowerCase().replace(/\s*hub\s*$/,'').trim();
   }
 
   function findSheetHeaderIndex(headers, candidates){
@@ -1363,9 +1437,13 @@ $('#openRidersPageBtn').addEventListener('click', ()=>{
       closeSettingsMenu();
       window.location.href = 'riders-agency.html';
     });
-    $('#openLossReportBtn').addEventListener('click', ()=>{
+$('#openLossReportBtn').addEventListener('click', ()=>{
       closeSettingsMenu();
       window.location.href = 'loss-report.html';
+    });
+    $('#openPnrPageBtn').addEventListener('click', ()=>{
+      closeSettingsMenu();
+      window.location.href = 'pnr.html';
     });
     $('#cancelUpload').addEventListener('click', closeModal);
     $('#weekPrevBtn').addEventListener('click', ()=>{

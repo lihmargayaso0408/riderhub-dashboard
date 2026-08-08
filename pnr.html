@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PNR of Riders</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body{padding:0;margin:0;}
+    .page-shell{max-width:1440px;margin:0 auto;padding:28px;}
+    .page-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;}
+    .page-head h1{font-family:'Space Grotesk',sans-serif;font-size:24px;margin:0;}
+    .page-head p{margin:4px 0 0;color:var(--text-dim);font-size:13px;}
+    .status-box{background:var(--card);border:1px solid var(--line-2);border-radius:6px;padding:12px 14px;font-size:13px;color:var(--text-dim);}
+    .page-actions{display:flex;align-items:center;gap:10px;}
+    .back-link{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 12px;border-radius:999px;cursor:pointer;font-size:13px;text-decoration:none;transition:background .15s ease,border-color .15s ease;}
+    .back-link:hover{background:var(--hover);}
+    .tabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+    .tab-btn{border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 12px;border-radius:999px;cursor:pointer;font-size:13px;transition:transform .2s ease,background .15s ease,border-color .15s ease,color .15s ease;}
+    .tab-btn:hover{transform:translateY(-2px);}
+    .tab-btn.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+    .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}
+    @media (max-width:700px){.stats-row{grid-template-columns:repeat(2,1fr);}}
+    .stat-card{background:var(--card);border:1px solid var(--line-2);border-radius:6px;padding:14px;transition:transform .25s cubic-bezier(.22,.61,.36,1),box-shadow .25s ease,border-color .25s ease;}
+    .stat-card:hover{transform:translateY(-3px);box-shadow:0 10px 24px var(--shadow);border-color:var(--amber);}
+    .stat-label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin-bottom:8px;}
+    .stat-value{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;}
+    .stat-value.teal{color:var(--teal);}
+    .stat-value.brick{color:var(--brick);}
+    .stat-value.amber{color:var(--amber-deep);}
+    .search-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
+    .search-row input{width:100%;max-width:340px;padding:9px 12px;border:1px solid var(--line);border-radius:3px;font-family:'IBM Plex Sans';font-size:13px;background:var(--card);color:var(--text);}
+    .month-filter{border:1px solid var(--line);background:var(--card);color:var(--text);padding:9px 12px;border-radius:3px;font-size:13px;font-family:'IBM Plex Sans';cursor:pointer;max-width:180px;}
+    .table-card{background:var(--card);border:1px solid var(--line-2);border-radius:8px;padding:16px;overflow:auto;}
+    table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:1000px;table-layout:fixed;}
+    th, td{padding:9px 11px;border-bottom:1px solid var(--line-2);text-align:left;overflow:hidden;text-overflow:ellipsis;}
+    th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);cursor:pointer;user-select:none;}
+    th:hover{color:var(--text);}
+    tbody tr{transition:background .12s ease;}
+    tbody tr:hover{background:var(--hover);}
+    .muted{color:var(--text-dim);}
+    .error{color:var(--brick);}
+    .num{font-family:'IBM Plex Mono',monospace;text-align:right;}
+    .money{font-family:'IBM Plex Mono',monospace;text-align:right;font-weight:600;}
+    .col-date{width:10%;}
+    .col-hub{width:12%;}
+    .col-rider{width:24%;}
+    .col-parcel{width:18%;}
+    .col-pnr{width:8%;}
+    .col-amount{width:14%;}
+    .col-status{width:14%;}
+    .pnr-chip{display:inline-flex;align-items:center;justify-content:center;min-width:26px;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap;font-family:'IBM Plex Mono',monospace;}
+    .pnr-solved{background:rgba(52,211,153,.16);color:#16a34a;}
+    .pnr-notsolved{background:rgba(239,68,68,.12);color:#ef4444;}
+    .pnr-nostatus{background:rgba(148,163,184,.16);color:#64748b;}
+    .pnr-blank{color:var(--text-dim);}
+    .status-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;}
+    .status-SOLVED{background:rgba(52,211,153,.16);color:#16a34a;}
+    .status-NOTSOLVED{background:rgba(239,68,68,.12);color:#ef4444;}
+    .status-NOSTATUS{background:rgba(148,163,184,.16);color:#64748b;}
+    .animate-in{animation:fadeUp .5s cubic-bezier(.22,.61,.36,1) both;}
+    .delay-1{animation-delay:.05s;}
+    .delay-2{animation-delay:.1s;}
+    .delay-3{animation-delay:.15s;}
+    .delay-4{animation-delay:.2s;}
+  </style>
+</head>
+<body>
+  <div class="page-shell">
+    <div class="page-head">
+      <div>
+        <h1>PNR of Riders</h1>
+        <p>Data is loaded from the shared PNR spreadsheet and split by hub.</p>
+      </div>
+      <div class="page-actions">
+        <a class="back-link" href="index.html">← Back to Dispatch Board</a>
+        <div class="status-box" id="sheetStatus">Loading sheet…</div>
+      </div>
+    </div>
+    <div class="tabs" id="hubTabs">
+      <button class="tab-btn active" data-hub="Buguias" type="button">Buguias</button>
+      <button class="tab-btn" data-hub="Bauko" type="button">Bauko</button>
+    </div>
+    <div class="stats-row" id="statsRow"></div>
+    <div class="search-row">
+      <input type="text" id="searchInput" placeholder="Search date, rider, parcel TN, status…">
+      <select id="monthFilter" class="month-filter" title="Filter by month">
+        <option value="">All months</option>
+      </select>
+    </div>
+    <div class="table-card">
+      <table>
+        <thead>
+          <tr>
+            <th class="col-date" data-sort="date">Date</th>
+            <th class="col-hub" data-sort="hub">Hub</th>
+            <th class="col-rider" data-sort="rider">Rider</th>
+            <th class="col-parcel" data-sort="parcelTn">Parcel TN</th>
+            <th class="col-pnr" data-sort="count">PNR</th>
+            <th class="col-amount" data-sort="amount">Amount (₱)</th>
+            <th class="col-status" data-sort="status">Status</th>
+          </tr>
+        </thead>
+        <tbody id="pnrRows"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const PNR_SHEET_ID = '1aGJXuO3tz5oLJyL6piEljz4A6cg6l0cnKvmtIpLkqMI';
+    const PNR_SHEET_NAME = 'PNR';
+
+    const statusEl = document.getElementById('sheetStatus');
+    const rowsEl = document.getElementById('pnrRows');
+    const statsRowEl = document.getElementById('statsRow');
+    const searchEl = document.getElementById('searchInput');
+    const monthFilterEl = document.getElementById('monthFilter');
+    const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
+    const sortableHeaders = Array.from(document.querySelectorAll('th[data-sort]'));
+
+let allRows = [];
+    let currentHub = 'Buguias';
+    let search = '';
+    let selectedMonth = '';
+    let selectedWeek = '';
+    let sortKey = 'date';
+    let sortDir = 'desc';
+
+    // Returns true if the given date string falls within the week that starts
+    // on the given Monday (weekStart). Used to match the dashboard's weekly view.
+    function isInWeek(dateStr, weekStartStr) {
+      if (!dateStr || !weekStartStr) return false;
+      const d = new Date(String(dateStr).slice(0, 10) + 'T00:00:00');
+      const start = new Date(String(weekStartStr).slice(0, 10) + 'T00:00:00');
+      if (isNaN(d) || isNaN(start)) return false;
+      const end = new Date(start);
+      end.setDate(end.getDate() + 6);
+      return d >= start && d <= end;
+    }
+
+    const MONTH_NAMES = [
+      'January','February','March','April','May','June',
+      'July','August','September','October','November','December'
+    ];
+
+    const USD_TO_PHP = 56.0; // Exchange rate: 1 USD = ₱56 (adjust as needed)
+
+    function getMonthKey(dateStr) {
+      if (!dateStr) return '';
+      const m = String(dateStr).match(/(\d{4})-(\d{2})/);
+      if (m) return m[1] + '-' + m[2];
+      const d = new Date(dateStr);
+      if (isNaN(d)) return '';
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    }
+
+    function populateMonthFilter() {
+      const months = new Set();
+      allRows.forEach(r => {
+        const key = getMonthKey(r.date);
+        if (key) months.add(key);
+      });
+      const sorted = Array.from(months).sort().reverse();
+      monthFilterEl.innerHTML = '<option value="">All months</option>';
+      sorted.forEach(key => {
+        const opt = document.createElement('option');
+        opt.value = key;
+        const [year, mon] = key.split('-');
+        opt.textContent = MONTH_NAMES[Number(mon) - 1] + ' ' + year;
+        monthFilterEl.appendChild(opt);
+      });
+      if (selectedMonth && sorted.includes(selectedMonth)) monthFilterEl.value = selectedMonth;
+      else selectedMonth = '';
+    }
+
+    function parseCsvLine(line) {
+      const values = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+          else { inQuotes = !inQuotes; }
+        } else if (ch === ',' && !inQuotes) { values.push(current); current = ''; }
+        else { current += ch; }
+      }
+      values.push(current);
+      return values;
+    }
+
+    function escapeHtml(value) {
+      return String(value || '').replace(/[&<>"']/g, match => ({'&':'&amp;','<':'<','>':'>','"':'"',"'":'&#39;'}[match]));
+    }
+
+    function findHeaderIndex(headers, candidates) {
+      for (const candidate of candidates) {
+        const index = headers.findIndex(h => h === candidate || h.includes(candidate));
+        if (index >= 0) return index;
+      }
+      return -1;
+    }
+
+    function getCell(values, index) {
+      return index >= 0 && values[index] !== undefined ? values[index].trim() : '';
+    }
+
+    function cleanNum(value) {
+      if (value === undefined || value === null) return 0;
+      const n = parseFloat(String(value).replace(/[^\d.\-]/g, ''));
+      return isNaN(n) ? 0 : n;
+    }
+
+    function fmtMoney(usd) {
+      const peso = (Number(usd) || 0) * USD_TO_PHP;
+      return '₱' + peso.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function normalizeStatus(s) {
+      return String(s || '').trim().toUpperCase().replace(/[^A-Z]/g, '');
+    }
+
+    async function loadSheet() {
+      try {
+        const sheetName = PNR_SHEET_NAME;
+        const SHEET_URL = `https://docs.google.com/spreadsheets/d/${PNR_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
+        const response = await fetch(SHEET_URL);
+        if (!response.ok) throw new Error('Unable to fetch sheet');
+        const text = await response.text();
+        const rawLines = text.split(/\r\n|\n|\r/);
+        if (rawLines.length < 2) throw new Error('No rows found in sheet');
+
+        const parsedLines = rawLines.map(line => parseCsvLine(line));
+        const headerRowIndex = parsedLines.findIndex(values => {
+          const normalized = values.map(v => String(v || '').trim().toLowerCase());
+          return normalized.some(h => ['date'].includes(h))
+              && normalized.some(h => ['hub'].includes(h))
+              && normalized.some(h => ['rider'].includes(h));
+        });
+        if (headerRowIndex < 0) throw new Error('Header row not found in sheet');
+
+        const headers = parsedLines[headerRowIndex];
+        const expectedColumns = headers.length;
+        const normalizedHeaders = headers.map(h => String(h || '').trim().toLowerCase());
+
+        function isHeaderRow(values) {
+          const normalized = values.map(v => String(v || '').trim().toLowerCase());
+          return normalizedHeaders.every((header, idx) => normalized[idx] === header || normalized[idx] === '');
+        }
+
+        const dataRows = parsedLines.slice(headerRowIndex + 1)
+          .filter(row => row.some(cell => String(cell || '').trim() !== ''))
+          .filter(row => !isHeaderRow(row))
+          .map(row => row.concat(Array(Math.max(0, expectedColumns - row.length)).fill('')));
+
+        const index = {
+          date: findHeaderIndex(normalizedHeaders, ['date']),
+          hub: findHeaderIndex(normalizedHeaders, ['hub']),
+          rider: findHeaderIndex(normalizedHeaders, ['rider']),
+          parcelTn: findHeaderIndex(normalizedHeaders, ['parcel tn','parcel','tracking','tn']),
+          count: findHeaderIndex(normalizedHeaders, ['count']),
+          amount: findHeaderIndex(normalizedHeaders, ['amount usd','amount','usd']),
+          status: findHeaderIndex(normalizedHeaders, ['status'])
+        };
+
+        allRows = dataRows.map(values => ({
+          date: getCell(values, index.date),
+          hub: getCell(values, index.hub),
+          rider: getCell(values, index.rider),
+          parcelTn: getCell(values, index.parcelTn),
+          count: cleanNum(getCell(values, index.count)),
+          amount: cleanNum(getCell(values, index.amount)),
+          status: getCell(values, index.status)
+        })).filter(row => row.date || row.parcelTn || row.rider || row.status);
+        // Drop rows that are entirely empty (trailing NO STATUS placeholders without a rider/PARCEL)
+        allRows = allRows.filter(row => row.rider || row.parcelTn || row.date);
+
+        populateMonthFilter();
+        renderStats();
+        renderRows();
+        statusEl.textContent = `Loaded ${allRows.length} PNR records`;
+      } catch (err) {
+        console.error(err);
+        statusEl.innerHTML = '<span class="error">Could not load the PNR spreadsheet. Check the link and try again.</span>';
+        rowsEl.innerHTML = '<tr><td colspan="7" class="error">No data available.</td></tr>';
+        statsRowEl.innerHTML = '';
+      }
+    }
+
+    function getFilteredRows() {
+      let rows = allRows;
+      // Filter by hub based on the hub column value
+      const target = currentHub.toLowerCase();
+      rows = rows.filter(r => {
+        const hubValue = String(r.hub || '').toLowerCase();
+        return hubValue.includes(target);
+      });
+if (selectedMonth) {
+        rows = rows.filter(r => getMonthKey(r.date) === selectedMonth);
+      }
+      if (selectedWeek) {
+        rows = rows.filter(r => isInWeek(r.date, selectedWeek));
+      }
+      return rows;
+    }
+
+    function applySorting(rows) {
+      const dir = sortDir === 'asc' ? 1 : -1;
+      return rows.slice().sort((a, b) => {
+        let av = a[sortKey], bv = b[sortKey];
+        if (sortKey === 'count' || sortKey === 'amount') {
+          av = Number(av) || 0; bv = Number(bv) || 0;
+          return (av - bv) * dir;
+        }
+        av = String(av || '').toLowerCase();
+        bv = String(bv || '').toLowerCase();
+        if (av < bv) return -1 * dir;
+        if (av > bv) return 1 * dir;
+        return 0;
+      });
+    }
+
+    function renderStats() {
+      const rows = getFilteredRows();
+      const totalRecords = rows.length;
+      const solved = rows.filter(r => normalizeStatus(r.status) === 'SOLVED').length;
+      const notSolved = rows.filter(r => normalizeStatus(r.status) === 'NOTSOLVED').length;
+      const totalAmount = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+      const stats = [
+        { label: 'PNR records', value: totalRecords, cls: '' },
+        { label: 'Solved', value: solved, cls: 'teal' },
+        { label: 'Not solved', value: notSolved, cls: 'brick' },
+        { label: 'Total amount (₱)', value: fmtMoney(totalAmount), cls: 'amber' },
+      ];
+      statsRowEl.innerHTML = stats.map((s, idx) => `
+        <div class="stat-card animate-in delay-${idx + 1}">
+          <div class="stat-label">${s.label}</div>
+          <div class="stat-value ${s.cls}">${s.value}</div>
+        </div>
+      `).join('');
+    }
+
+    function getPnrChip(row) {
+      const status = normalizeStatus(row.status);
+      const hasName = String(row.rider || '').trim() !== '';
+      // If there is no rider name, leave the PNR cell blank
+      if (!hasName) {
+        return '<span class="pnr-blank">—</span>';
+      }
+      if (status === 'SOLVED') {
+        return `<span class="pnr-chip pnr-solved">${escapeHtml(row.count)}</span>`;
+      }
+      if (status === 'NOTSOLVED') {
+        return `<span class="pnr-chip pnr-notsolved">${escapeHtml(row.count)}</span>`;
+      }
+      return `<span class="pnr-chip pnr-nostatus">${escapeHtml(row.count)}</span>`;
+    }
+
+    function getStatusChip(status) {
+      const normalized = normalizeStatus(status);
+      if (normalized === 'SOLVED') return `<span class="status-chip status-SOLVED">${escapeHtml(status)}</span>`;
+      if (normalized === 'NOTSOLVED') return `<span class="status-chip status-NOTSOLVED">${escapeHtml(status)}</span>`;
+      return `<span class="status-chip status-NOSTATUS">${escapeHtml(status || 'NO STATUS')}</span>`;
+    }
+
+    function renderRows() {
+      let rows = getFilteredRows();
+      if (search) {
+        const q = search.toLowerCase();
+        rows = rows.filter(r =>
+          String(r.date || '').toLowerCase().includes(q) ||
+          String(r.hub || '').toLowerCase().includes(q) ||
+          String(r.rider || '').toLowerCase().includes(q) ||
+          String(r.parcelTn || '').toLowerCase().includes(q) ||
+          String(r.status || '').toLowerCase().includes(q)
+        );
+      }
+      rows = applySorting(rows);
+      if (!rows.length) {
+        rowsEl.innerHTML = '<tr><td colspan="7" class="muted">No PNR records found for this hub.</td></tr>';
+        return;
+      }
+      rowsEl.innerHTML = rows.map(r => {
+        return `
+          <tr>
+            <td>${escapeHtml(r.date)}</td>
+            <td>${escapeHtml(r.hub)}</td>
+            <td>${escapeHtml(r.rider)}</td>
+            <td>${escapeHtml(r.parcelTn)}</td>
+            <td class="num">${getPnrChip(r)}</td>
+            <td class="money">${fmtMoney(r.amount)}</td>
+            <td>${getStatusChip(r.status)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Apply the shared theme (controlled only from the dashboard's option/settings drawer)
+    function applySavedTheme() {
+      const savedTheme = getSavedTheme();
+      const isDark = savedTheme === 'dark' || (savedTheme === null && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      document.body.classList.toggle('dark', isDark);
+    }
+
+    function getSavedTheme() {
+      try {
+        const raw = localStorage.getItem('hub-theme');
+        if (raw === null || raw === undefined) return null;
+        try { return JSON.parse(raw); } catch (e) { return raw; }
+      } catch (err) { return null; }
+    }
+
+applySavedTheme();
+
+    // Read optional query params (?rider=...&hub=...) passed from the dashboard's PNR link
+    (function applyQueryParams() {
+const params = new URLSearchParams(window.location.search);
+      const riderParam = params.get('rider');
+      const hubParam = params.get('hub');
+      const weekParam = params.get('week');
+      if (weekParam) {
+        selectedWeek = weekParam;
+      }
+      if (hubParam) {
+        const normalized = String(hubParam).toLowerCase();
+        const match = tabButtons.find(btn => String(btn.dataset.hub).toLowerCase() === normalized);
+        if (match) {
+          currentHub = match.dataset.hub;
+          tabButtons.forEach(b => b.classList.toggle('active', b === match));
+        }
+      }
+      if (riderParam) {
+        search = riderParam;
+        searchEl.value = riderParam;
+      }
+    })();
+
+    searchEl.addEventListener('input', e => { search = e.target.value; renderRows(); });
+
+    monthFilterEl.addEventListener('change', e => {
+      selectedMonth = e.target.value;
+      renderStats();
+      renderRows();
+    });
+
+    sortableHeaders.forEach(th => {
+      th.addEventListener('click', () => {
+        const key = th.dataset.sort;
+        if (sortKey === key) { sortDir = sortDir === 'asc' ? 'desc' : 'asc'; }
+        else { sortKey = key; sortDir = 'desc'; }
+        renderRows();
+      });
+    });
+
+    tabButtons.forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (btn.dataset.hub === currentHub) return;
+        currentHub = btn.dataset.hub;
+        tabButtons.forEach(b => b.classList.toggle('active', b === btn));
+        statusEl.textContent = 'Loading sheet…';
+        rowsEl.innerHTML = '<tr><td colspan="7" class="muted">Loading...</td></tr>';
+        renderStats();
+        renderRows();
+      });
+    });
+
+    loadSheet();
+  </script>
+</body>
+</html>
