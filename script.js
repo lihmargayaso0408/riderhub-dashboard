@@ -509,8 +509,12 @@ html += '<div class="strip">';
         <select id="vehicleFilter"><option value="">All vehicle types</option></select>
         <select id="groupFilter"><option value="">All driver groups</option></select>
 </div>
-      <div class="table-scroll"><table><thead><tr id="theadRow"></tr></thead><tbody id="tbody"></tbody></table></div>
+<div class="table-scroll" id="tableScroll"><div class="drag-fade" id="dashDragFade"></div><table><thead><tr id="theadRow"></tr></thead><tbody id="tbody"></tbody></table></div>
       <div class="row-count" id="rowCount"></div>
+      <div class="drag-hint" id="dashDragHint">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+        Swipe to see more
+      </div>
     </div>`;
 
     $('#content').innerHTML = html;
@@ -527,6 +531,63 @@ await renderTrend();
     renderTopBottom(rows);
     setupTableControls(rows);
     renderTable();
+    wireTableDrag();
+  }
+
+  /* ---- Sideways drag-to-scroll control for the dashboard table ---- */
+  let dashDragState = null;
+  function wireTableDrag(){
+    const scrollEl = $('#tableScroll');
+    const fadeEl = $('#dashDragFade');
+    const hintEl = $('#dashDragHint');
+    if(!scrollEl) return;
+
+    function overflows(){ return scrollEl.scrollWidth > scrollEl.clientWidth + 1; }
+    function updateHint(){
+      if(!hintEl || !fadeEl) return;
+      const ov = overflows();
+      const atEnd = scrollEl.scrollLeft + scrollEl.clientWidth >= scrollEl.scrollWidth - 4;
+      hintEl.style.opacity = (ov && !atEnd) ? '1' : '0';
+      fadeEl.style.opacity = (ov && !atEnd) ? '1' : '0';
+    }
+    function onStart(e){
+      if(e.target.closest('th')) return;
+      const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
+      dashDragState = { startX: pt.clientX, startY: pt.clientY, startLeft: scrollEl.scrollLeft, moved:false };
+      scrollEl.classList.add('dragging');
+      document.body.style.userSelect = 'none';
+      document.body.style.webkitUserSelect = 'none';
+    }
+    function onMove(e){
+      if(!dashDragState) return;
+      const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
+      const dx = pt.clientX - dashDragState.startX;
+      const dy = pt.clientY - dashDragState.startY;
+      if(!dashDragState.moved && Math.abs(dx) > 6 && Math.abs(dx) > Math.abs(dy)) dashDragState.moved = true;
+      if(!dashDragState.moved) return;
+      if(e.cancelable) e.preventDefault();
+      scrollEl.scrollLeft = dashDragState.startLeft - dx;
+      updateHint();
+    }
+    function onEnd(){
+      if(!dashDragState) return;
+      dashDragState = null;
+      scrollEl.classList.remove('dragging');
+      document.body.style.userSelect = '';
+      document.body.style.webkitUserSelect = '';
+      updateHint();
+    }
+
+    scrollEl.addEventListener('mousedown', onStart);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onEnd);
+    scrollEl.addEventListener('touchstart', onStart, { passive: true });
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('touchend', onEnd);
+    window.addEventListener('touchcancel', onEnd);
+    scrollEl.addEventListener('scroll', updateHint);
+    window.addEventListener('resize', updateHint);
+    setTimeout(updateHint, 0);
   }
 
   async function renderTrend(){
@@ -1320,9 +1381,62 @@ $('#downloadHubSelect').addEventListener('change', populateDownloadWeekOptions);
     $('#cancelDownload').addEventListener('click', closeDownloadModal);
     $('#confirmDownload').addEventListener('click', downloadRecords);
 
-    // Riders & Agency modal events
+// Riders & Agency modal events
     $('#closeRiders').addEventListener('click', closeRidersModal);
     $('#ridersOverlay').addEventListener('click', e=>{ if(e.target.id==='ridersOverlay') closeRidersModal(); });
+
+    // Sideways drag-to-scroll for the Riders modal table
+    (function wireRidersTableDrag(){
+      const wrap = document.getElementById('ridersTableWrap');
+      const fadeEl = document.getElementById('ridersDragFade');
+      const hintEl = document.getElementById('ridersDragHint');
+      if(!wrap) return;
+      let ds = null;
+      function flows(){ return wrap.scrollWidth > wrap.clientWidth + 1; }
+      function update(){
+        if(!hintEl || !fadeEl) return;
+        const ov = flows();
+        const atEnd = wrap.scrollLeft + wrap.clientWidth >= wrap.scrollWidth - 4;
+        hintEl.style.opacity = (ov && !atEnd) ? '1' : '0';
+        fadeEl.style.opacity = (ov && !atEnd) ? '1' : '0';
+      }
+      function start(e){
+        if(e.target.closest('th')) return;
+        const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
+        ds = { sx: pt.clientX, sy: pt.clientY, sl: wrap.scrollLeft, moved:false };
+        wrap.classList.add('dragging');
+        document.body.style.userSelect = 'none';
+        document.body.style.webkitUserSelect = 'none';
+      }
+      function move(e){
+        if(!ds) return;
+        const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
+        const dx = pt.clientX - ds.sx, dy = pt.clientY - ds.sy;
+        if(!ds.moved && Math.abs(dx) > 6 && Math.abs(dx) > Math.abs(dy)) ds.moved = true;
+        if(!ds.moved) return;
+        if(e.cancelable) e.preventDefault();
+        wrap.scrollLeft = ds.sl - dx;
+        update();
+      }
+      function end(){
+        if(!ds) return;
+        ds = null;
+        wrap.classList.remove('dragging');
+        document.body.style.userSelect = '';
+        document.body.style.webkitUserSelect = '';
+        update();
+      }
+      wrap.addEventListener('mousedown', start);
+      window.addEventListener('mousemove', move);
+      window.addEventListener('mouseup', end);
+      wrap.addEventListener('touchstart', start, { passive:true });
+      window.addEventListener('touchmove', move, { passive:false });
+      window.addEventListener('touchend', end);
+      window.addEventListener('touchcancel', end);
+      wrap.addEventListener('scroll', update);
+      window.addEventListener('resize', update);
+      setTimeout(update, 0);
+    })();
     $('#ridersSearch').addEventListener('input', e=>{
       riders.search = e.target.value;
       renderRidersRows();

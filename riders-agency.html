@@ -33,11 +33,18 @@
     .stat-value.brick{color:var(--brick);}
     .stat-value.amber{color:var(--amber-deep);}
     .search-row{margin-bottom:12px;}
-    .search-row input{width:100%;max-width:340px;padding:9px 12px;border:1px solid var(--line);border-radius:3px;font-family:'IBM Plex Sans';font-size:13px;background:var(--card);color:var(--text);}
-    .table-card{background:var(--card);border:1px solid var(--line-2);border-radius:8px;padding:16px;overflow:auto;}
-    table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px;}
-    th, td{padding:9px 11px;border-bottom:1px solid var(--line-2);text-align:left;white-space:nowrap;}
-    th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);cursor:pointer;user-select:none;}
+.search-row input{width:100%;max-width:340px;padding:9px 12px;border:1px solid var(--line);border-radius:3px;font-family:'IBM Plex Sans';font-size:13px;background:var(--card);color:var(--text);}
+    .table-card{background:var(--card);border:1px solid var(--line-2);border-radius:8px;padding:16px;overflow:auto;position:relative;cursor:grab;touch-action:pan-y;user-select:none;-webkit-user-select:none;scrollbar-width:thin;}
+    .table-card.dragging{cursor:grabbing;}
+    .table-card.dragging ::-webkit-scrollbar{height:0;}
+    .table-card.dragging *{pointer-events:none;}
+    .table-card .drag-fade{position:absolute;top:0;right:0;bottom:0;width:34px;pointer-events:none;background:linear-gradient(90deg,transparent,var(--card));opacity:0;transition:opacity .2s ease;z-index:2;}
+    body.dark .table-card .drag-fade{background:linear-gradient(90deg,transparent,var(--card));}
+    .table-card .drag-hint{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);pointer-events:none;background:var(--ink);color:#fff;font-size:11px;font-weight:600;letter-spacing:.04em;padding:6px 14px;border-radius:999px;opacity:0;transition:opacity .25s ease;z-index:3;white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,.28);display:flex;align-items:center;gap:6px;}
+    .table-card .drag-hint svg{width:12px;height:12px;}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:900px;}
+    th, td{padding:12px 14px;border-bottom:1px solid var(--line-2);text-align:left;white-space:nowrap;}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);cursor:pointer;user-select:none;}
     th:hover{color:var(--text);}
     tbody tr{transition:background .12s ease;}
     tbody tr:hover{background:var(--hover);}
@@ -74,7 +81,8 @@
     <div class="search-row">
       <input type="text" id="searchInput" placeholder="Search rider name, area, agency, account ID, contact…">
     </div>
-    <div class="table-card">
+<div class="table-card" id="tableCard">
+      <div class="drag-fade" id="dragFade"></div>
       <table>
         <thead>
           <tr>
@@ -88,6 +96,10 @@
         </thead>
         <tbody id="sheetRows"></tbody>
       </table>
+      <div class="drag-hint" id="dragHint">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+        Swipe to see more
+      </div>
     </div>
   </div>
 
@@ -328,6 +340,82 @@
         await loadSheet();
       });
     });
+
+/* ---- Sideways drag-to-scroll control for the riders table ---- */
+    const tableCardEl = document.getElementById('tableCard');
+    const dragFadeEl = document.getElementById('dragFade');
+    const dragHintEl = document.getElementById('dragHint');
+    let dragState2 = null;
+
+    function tableOverflows() {
+      return tableCardEl.scrollWidth > tableCardEl.clientWidth + 1;
+    }
+
+    function updateHintVisibility() {
+      if (!dragHintEl || !dragFadeEl) return;
+      const overflows = tableOverflows();
+      const atEnd = tableCardEl.scrollLeft + tableCardEl.clientWidth >= tableCardEl.scrollWidth - 4;
+      dragHintEl.style.opacity = (overflows && !atEnd) ? '1' : '0';
+      dragFadeEl.style.opacity = (overflows && !atEnd) ? '1' : '0';
+    }
+
+    function onTableDragStart(e) {
+      // Only start dragging on horizontal intent; ignore clicks on sortable headers
+      if (e.target.closest('th[data-sort]')) return;
+      const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
+      dragState2 = {
+        startX: pt.clientX,
+        startY: pt.clientY,
+        startLeft: tableCardEl.scrollLeft,
+        moved: false
+      };
+      tableCardEl.classList.add('dragging');
+      document.body.style.userSelect = 'none';
+      document.body.style.webkitUserSelect = 'none';
+    }
+
+    function onTableDragMove(e) {
+      if (!dragState2) return;
+      const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
+      const dx = pt.clientX - dragState2.startX;
+      const dy = pt.clientY - dragState2.startY;
+      // Only treat as a sideways drag once horizontal movement dominates
+if(!dragState2.moved && Math.abs(dx) > 4 && Math.abs(dx) > Math.abs(dy)) {
+        dragState2.moved = true;
+      }
+      if (!dragState2.moved) return;
+      if (e.cancelable) e.preventDefault();
+      tableCardEl.scrollLeft = dragState2.startLeft - dx;
+      updateHintVisibility();
+    }
+
+    function onTableDragEnd() {
+      if (!dragState2) return;
+      dragState2 = null;
+      tableCardEl.classList.remove('dragging');
+      document.body.style.userSelect = '';
+      document.body.style.webkitUserSelect = '';
+      updateHintVisibility();
+    }
+
+    if (tableCardEl) {
+      tableCardEl.addEventListener('mousedown', onTableDragStart);
+      window.addEventListener('mousemove', onTableDragMove);
+      window.addEventListener('mouseup', onTableDragEnd);
+      tableCardEl.addEventListener('touchstart', onTableDragStart, { passive: true });
+      window.addEventListener('touchmove', onTableDragMove, { passive: false });
+      window.addEventListener('touchend', onTableDragEnd);
+      window.addEventListener('touchcancel', onTableDragEnd);
+      tableCardEl.addEventListener('scroll', updateHintVisibility);
+      window.addEventListener('resize', updateHintVisibility);
+    }
+
+    // Re-evaluate the hint after the sheet data renders
+    const originalRenderRows = renderRows;
+    renderRows = function () {
+      originalRenderRows.apply(this, arguments);
+      setTimeout(updateHintVisibility, 0);
+    };
 
     loadSheet();
   </script>
