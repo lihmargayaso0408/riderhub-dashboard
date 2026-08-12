@@ -504,21 +504,21 @@ function animateCountUp(el, target, isPct){
 
     let html = '<div class="kpis">';
     kpis.forEach((k,idx)=>{
-      html += `<div class="kpi animate-in delay-${idx+1}"><div class="kpi-label">${k.label}</div><div class="kpi-value ${k.cls||''}" data-anim-target="${k.value}" data-anim-type="${k.anim}">${k.value}</div>${k.sub?`<div class="kpi-sub">${k.sub}</div>`:''}</div>`;
+      html += `<div class="kpi"><div class="kpi-label">${k.label}</div><div class="kpi-value ${k.cls||''}" data-anim-target="${k.value}" data-anim-type="${k.anim}">${k.value}</div>${k.sub?`<div class="kpi-sub">${k.sub}</div>`:''}</div>`;
     });
     html += '</div>';
 
 html += '<div class="panels">';
-    html += `<div class="panel animate-in delay-2"><h3>Vehicle types</h3><p class="hint">Rider count by vehicle type</p><div id="trendWrap"></div></div>`;
-html += `<div class="panel animate-in delay-3 clickable-panel" id="notSolvedPanel" role="link" tabindex="0" title="Open PNR of Riders"><h3>Not Solved PNR <span class="panel-arrow">→</span></h3><p class="hint">Riders with not-solved PNR across all hubs</p><div id="notSolvedWrap"></div></div>`;
+    html += `<div class="panel"><h3>Vehicle types</h3><p class="hint">Rider count by vehicle type</p><div id="trendWrap"></div></div>`;
+    html += `<div class="panel clickable-panel" id="notSolvedPanel" role="link" tabindex="0" title="Open PNR of Riders"><h3>Not Solved PNR <span class="panel-arrow">→</span></h3><p class="hint">Riders with not-solved PNR across all hubs</p><div id="notSolvedWrap"></div></div>`;
     html += '</div>';
 
 html += '<div class="strip">';
-    html += `<div class="panel animate-in delay-4"><h3>🟢 Top performers</h3><p class="hint">Highest delivery success (min. 1 active day)</p><div id="topList"></div></div>`;
-    html += `<div class="panel animate-in delay-5"><h3>🔻 Needs attention</h3><p class="hint">Lowest delivery success (min. 1 active day)</p><div id="bottomList"></div></div>`;
+    html += `<div class="panel"><h3>🟢 Top performers</h3><p class="hint">Highest delivery success (min. 1 active day)</p><div id="topList"></div></div>`;
+    html += `<div class="panel"><h3>🔻 Needs attention</h3><p class="hint">Lowest delivery success (min. 1 active day)</p><div id="bottomList"></div></div>`;
     html += '</div>';
 
-    html += `<div class="table-panel animate-in delay-6">
+    html += `<div class="table-panel">
       <div class="table-controls">
         <input type="text" id="searchInput" placeholder="Search rider name or ID…">
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-dim);"><input type="checkbox" id="hideInactiveToggle" ${state.hideInactive ? 'checked' : ''}> Hide inactive riders</label>
@@ -637,9 +637,18 @@ await renderTrend();
       return;
     }
 
+    const VT_COLORS = ['var(--teal)','var(--amber-deep)','var(--brick)','var(--olive)','var(--slate)','#6366f1','#8b5cf6','#ec4899'];
     wrap.innerHTML = `
       <div style="display:flex;flex-direction:column;gap:8px;">
-        ${entries.map(([vehicle, count]) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid var(--line-2);border-radius:5px;background:var(--hover);"><span>${escapeHtml(vehicle)}</span><b>${count}</b></div>`).join('')}
+        ${entries.map(([vehicle, count], idx) => {
+          const color = VT_COLORS[idx % VT_COLORS.length];
+          return `
+            <div class="vt-item" style="border-left-color:${color};animation-delay:${Math.min(idx*60,400)}ms">
+              <span class="vt-name">${escapeHtml(vehicle)}</span>
+              <span class="vt-count">${count}</span>
+            </div>
+          `;
+        }).join('')}
       </div>
     `;
   }
@@ -684,12 +693,8 @@ const entries = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
       const max = entries[0][1] || 1;
       wrap.innerHTML = entries.map(([name,cnt], idx) => `
         <div class="ns-row" style="animation-delay:${Math.min(idx*60,600)}ms">
-          <div class="ns-row-top">
-            <span class="ns-rank">${idx+1}</span>
-            <span class="ns-name">${escapeHtml(name)}</span>
-            <b class="ns-count mono" data-count="${cnt}">0</b>
-          </div>
-          <div class="ns-bar"><span class="ns-bar-fill" style="width:${Math.max(6, Math.round(cnt/max*100))}%"></span></div>
+          <span class="ns-name">${escapeHtml(name)}</span>
+          <span class="ns-count mono" data-count="${cnt}">0</span>
         </div>
       `).join('');
       // Animate each count up to its final value for a fluid, lively feel.
@@ -722,10 +727,9 @@ const entries = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
     {key:'hub', label:'Hub', type:'text', showOnlyAll:true},
     {key:'vehicleType', label:'Vehicle', type:'text'},
     {key:'area', label:'Area', type:'text'},
-    {key:'pnr', label:'PNR', type:'text'},
     {key:'driverGroup', label:'Group', type:'text'},
-{key:'attendDays', label:'Days', type:'num'},
-{key:'avgParcelsPerDay', label:'Parcels/Day', type:'num1'},
+    {key:'attendDays', label:'Days', type:'num'},
+    {key:'avgParcelsPerDay', label:'Parcels/Day', type:'num1'},
     {key:'parcelsAssigned', label:'Parcels Assigned', type:'num'},
     {key:'parcelsOnHold', label:'On-hold', type:'num'},
     {key:'deliverySuccessRate', label:'Delivery Success', type:'pct'},

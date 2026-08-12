@@ -274,7 +274,7 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text
         { label: 'Agencies', value: agencies, cls: 'amber' },
       ];
       statsRowEl.innerHTML = stats.map((s, idx) => `
-        <div class="stat-card animate-in delay-${idx + 1}">
+        <div class="stat-card">
           <div class="stat-label">${s.label}</div>
           <div class="stat-value ${s.cls}">${s.value}</div>
         </div>

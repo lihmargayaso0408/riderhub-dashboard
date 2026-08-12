@@ -331,7 +331,7 @@ const stats = [
         { label: 'Driver losses', value: driverLoss, cls: 'teal' },
       ];
       statsRowEl.innerHTML = stats.map((s, idx) => `
-        <div class="stat-card animate-in delay-${idx + 1}">
+        <div class="stat-card">
           <div class="stat-label">${s.label}</div>
           <div class="stat-value ${s.cls}">${s.value}</div>
           ${idx === 2 ? `
