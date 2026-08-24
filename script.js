@@ -408,10 +408,15 @@ function fmtWeekLabel(d){
     if(!actions.delete){ const b=$('#deleteDateMenuBtn'); if(b) b.style.display='none'; }
     if(!actions.download){ const b=$('#downloadRecordsBtn'); if(b) b.style.display='none'; }
 
-    // Admin-only: Access Requests entry.
+    // Admin-only: Access Requests + Manage Accounts entries.
     if(perms.role==='admin'){
       const ab = $('#openAccessBtn'); if(ab) ab.style.display='';
       setupAccessRequests();
+      const mb = $('#openAccountsBtn');
+      if(mb){
+        mb.style.display='';
+        mb.addEventListener('click', ()=>{ closeSettingsMenu(); window.location.href='accounts.html'; });
+      }
     }
   }
 

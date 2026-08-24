@@ -119,6 +119,18 @@ const Auth = {
   },
   async reject(uid) {
     await updateDoc(doc(db, 'users', uid), { status: 'rejected', updatedAt: serverTimestamp() });
+  },
+
+  // Returns every approved account (the accounts that can log in).
+  // Each item is { uid, email, name, hubs, actions, role, updatedAt }.
+  async listAccounts() {
+    const q = query(collection(db, 'users'), where('status', '==', 'approved'));
+    const s = await getDocs(q);
+    return s.docs.map(d => ({ uid: d.id, id: d.id, ...d.data() }));
+  },
+  // Revoke access for an approved account. The account can no longer log in.
+  async removeAccess(uid) {
+    await updateDoc(doc(db, 'users', uid), { status: 'rejected', updatedAt: serverTimestamp() });
   }
 };
 

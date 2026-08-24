@@ -11,6 +11,17 @@
       .replace(/</g, '<').replace(/>/g, '>');
   }
 
+  // Cheap, non-authoritative check used only to decide which menu items to
+  // show; the target pages enforce access authoritatively themselves.
+  function isAdmin() {
+    try {
+      var u = window.Auth && window.Auth.currentUser && window.Auth.currentUser();
+      if (!u) return false;
+      var emails = (window.Auth && window.Auth.ADMIN_EMAILS) || [];
+      return emails.indexOf(String(u.email || '').toLowerCase()) !== -1;
+    } catch (e) { return false; }
+  }
+
   var THEME_KEY = 'hub-theme';
 
   function getSavedTheme() {
@@ -58,6 +69,7 @@
     var svgMap = '<path d="M9 3 3 6v15l6-3 6 3 6-3V3l-6 3-6-3z"/><path d="M9 3v15M15 6v15"/>';
     var svgLogout = '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>';
     var svgTheme = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
+    var svgAccounts = '<circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0-3-3.85"/>';
 
     var btn = '<button class="wheel-btn" id="optSettingsToggle" title="Open options" aria-label="Open options menu" type="button">' + wheelSvg + '</button>';
 
@@ -69,8 +81,9 @@
       + item('optRidersBtn', 'Riders &amp; Agency per hub', svgRiders)
       + item('optLossBtn', 'Loss Report per hub', svgLoss)
       + item('optPnrBtn', 'PNR of Riders', svgPnr)
-      + item('optAreaBtn', 'Area Map', svgMap)
-      + item('optLogoutBtn', 'Log out', svgLogout)
+       + item('optAreaBtn', 'Area Map', svgMap)
+       + (isAdmin() ? item('optAccountsBtn', 'Manage Accounts', svgAccounts) : '')
+       + item('optLogoutBtn', 'Log out', svgLogout)
       + '<button class="drawer-item drawer-item-theme" id="optThemeToggle" type="button">'
       + icon(svgTheme) + '<span class="drawer-label">Dark mode</span>'
       + '<span class="settings-pill" id="optThemeState">Off</span></button>'
@@ -94,7 +107,7 @@
     shell.style.position = 'fixed';
     shell.style.top = '16px';
     shell.style.left = '16px';
-    shell.style.zIndex = '75';
+    shell.style.zIndex = '1500';
     // The wheel button is styled as a 56px circle in styles.css
     var btn = document.getElementById('optSettingsToggle');
     if (btn) {
@@ -201,6 +214,8 @@
     if (loss) loss.addEventListener('click', go('loss-report.html'));
     if (pnr) pnr.addEventListener('click', go('pnr.html'));
     if (area) area.addEventListener('click', go('area-map.html'));
+    var accounts = document.getElementById('optAccountsBtn');
+    if (accounts) accounts.addEventListener('click', go('accounts.html'));
     if (logout) logout.addEventListener('click', async function(){
       closeMenu();
       try { await window.Auth.logout(); } catch (e) {}

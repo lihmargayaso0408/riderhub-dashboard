@@ -98,16 +98,7 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text
 <div class="table-card" id="tableCard">
       <div class="drag-fade" id="dragFade"></div>
       <table>
-        <thead>
-          <tr>
-            <th data-sort="riderName">Rider Name</th>
-            <th data-sort="area">Area</th>
-            <th data-sort="contact">Contact #</th>
-            <th data-sort="accountId">Account ID</th>
-            <th data-sort="agency">Agency</th>
-            <th data-sort="status">Status</th>
-          </tr>
-        </thead>
+        <thead id="ridersHead"></thead>
         <tbody id="sheetRows"></tbody>
       </table>
       <div class="drag-hint" id="dragHint">
@@ -142,7 +133,8 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text
     const statsRowEl = document.getElementById('statsRow');
     const searchEl = document.getElementById('searchInput');
     const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
-    const sortableHeaders = Array.from(document.querySelectorAll('th[data-sort]'));
+    let sortableHeaders = [];
+    let columns = [];
 
     function applyHubFilter(){
       const allowed = (__perms && __perms.hubs && __perms.hubs.length) ? __perms.hubs : ['Buguias','MB Atok','Bauko'];
@@ -239,6 +231,13 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text
         };
         hasHubColumn = index.hub >= 0;
 
+        columns = normalizedHeaders.map((h, i) => ({
+          idx: i,
+          key: h,
+          label: ({'rider name':'Rider Name','rider':'Rider Name','driver name':'Rider Name','driver':'Rider Name','name':'Rider Name','area':'Area','location':'Area','contact #':'Contact #','contact':'Contact #','contact number':'Contact #','phone':'Contact #','mobile':'Contact #','account id':'Account ID','accountid':'Account ID','account':'Account ID','acct id':'Account ID','agency':'Agency','agencies':'Agency','status':'Status','state':'Status','hub':'Hub','hubs':'Hub','branch':'Hub','branch name':'Hub'}[h] || headers[i]),
+          isStatus: h === 'status' || h === 'state'
+        }));
+
         allRows = dataRows.map(values => ({
           riderName: getCell(values, index.riderName),
           area: getCell(values, index.area),
@@ -246,16 +245,18 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text
           accountId: getCell(values, index.accountId),
           agency: getCell(values, index.agency),
           status: getCell(values, index.status),
-          hub: hasHubColumn ? getCell(values, index.hub) : ''
+          hub: hasHubColumn ? getCell(values, index.hub) : '',
+          _cells: values
         })).filter(row => row.riderName || row.area || row.accountId || row.agency || row.status || row.hub);
 
+        renderHead();
         renderStats();
         renderRows();
         statusEl.textContent = `Loaded ${allRows.length} rider records`;
       } catch (err) {
         console.error(err);
         statusEl.innerHTML = '<span class="error">Could not load the Google Sheet. Check the published link and try again.</span>';
-        rowsEl.innerHTML = '<tr><td colspan="6" class="error">No data available.</td></tr>';
+        rowsEl.innerHTML = `<tr><td colspan="${columns.length || 6}" class="error">No data available.</td></tr>`;
         statsRowEl.innerHTML = '';
       }
     }
@@ -269,12 +270,18 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text
       });
     }
 
+    function cellVal(row, key){
+      if (row[key] !== undefined && row[key] !== null && row[key] !== '') return row[key];
+      const col = columns.find(c => c.key === key);
+      if (col && row._cells && row._cells[col.idx] !== undefined) return row._cells[col.idx];
+      return '';
+    }
+
     function applySorting(rows) {
       const dir = sortDir === 'asc' ? 1 : -1;
       return rows.slice().sort((a, b) => {
-        let av = a[sortKey], bv = b[sortKey];
-        av = String(av || '').toLowerCase();
-        bv = String(bv || '').toLowerCase();
+        let av = String(cellVal(a, sortKey) || '').toLowerCase();
+        let bv = String(cellVal(b, sortKey) || '').toLowerCase();
         if (av < bv) return -1 * dir;
         if (av > bv) return 1 * dir;
         return 0;
@@ -307,51 +314,45 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text
       return '';
     }
 
+    function renderHead() {
+      const head = document.getElementById('ridersHead');
+      if (!head) return;
+      head.innerHTML = '<tr>' + columns.map(c => `<th data-sort="${escapeHtml(c.key)}">${escapeHtml(c.label)}</th>`).join('') + '</tr>';
+      sortableHeaders = Array.from(head.querySelectorAll('th[data-sort]'));
+      sortableHeaders.forEach(th => {
+        th.addEventListener('click', () => {
+          const key = th.dataset.sort;
+          if (sortKey === key) { sortDir = sortDir === 'asc' ? 'desc' : 'asc'; }
+          else { sortKey = key; sortDir = 'asc'; }
+          renderRows();
+        });
+      });
+    }
+
     function renderRows() {
       let rows = getFilteredRows();
       if (search) {
         const q = search.toLowerCase();
-        rows = rows.filter(r =>
-          String(r.riderName || '').toLowerCase().includes(q) ||
-          String(r.area || '').toLowerCase().includes(q) ||
-          String(r.agency || '').toLowerCase().includes(q) ||
-          String(r.accountId || '').toLowerCase().includes(q) ||
-          String(r.contact || '').toLowerCase().includes(q)
-        );
+        rows = rows.filter(r => columns.some(c => String(cellVal(r, c.key) || '').toLowerCase().includes(q)));
       }
       rows = applySorting(rows);
       if (!rows.length) {
-        rowsEl.innerHTML = '<tr><td colspan="6" class="muted">No rider records found for this hub.</td></tr>';
+        rowsEl.innerHTML = `<tr><td colspan="${columns.length || 6}" class="muted">No rider records found for this hub.</td></tr>`;
         return;
       }
-      rowsEl.innerHTML = rows.map(r => {
-        const statusValue = escapeHtml(r.status || '');
-        const statusClass = getStatusClass(r.status);
-        return `
-          <tr>
-            <td>${escapeHtml(r.riderName)}</td>
-            <td>${escapeHtml(r.area)}</td>
-            <td>${escapeHtml(r.contact)}</td>
-            <td>${escapeHtml(r.accountId)}</td>
-            <td>${escapeHtml(r.agency)}</td>
-            <td><span class="status-chip ${statusClass}">${statusValue}</span></td>
-          </tr>
-        `;
-      }).join('');
+      rowsEl.innerHTML = rows.map(r => '<tr>' + columns.map(c => {
+        if (c.isStatus) {
+          const v = escapeHtml(r.status || '');
+          const cls = getStatusClass(r.status);
+          return `<td><span class="status-chip ${cls}">${v}</span></td>`;
+        }
+        return `<td>${escapeHtml(String(cellVal(r, c.key) || ''))}</td>`;
+      }).join('') + '</tr>').join('');
     }
 
     if (typeof window.applySavedTheme === 'function') window.applySavedTheme();
 
     searchEl.addEventListener('input', e => { search = e.target.value; renderRows(); });
-
-    sortableHeaders.forEach(th => {
-      th.addEventListener('click', () => {
-        const key = th.dataset.sort;
-        if (sortKey === key) { sortDir = sortDir === 'asc' ? 'desc' : 'asc'; }
-        else { sortKey = key; sortDir = 'asc'; }
-        renderRows();
-      });
-    });
 
     tabButtons.forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -359,7 +360,7 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text
         currentHub = btn.dataset.hub;
         tabButtons.forEach(b => b.classList.toggle('active', b === btn));
         statusEl.textContent = 'Loading sheet…';
-        rowsEl.innerHTML = '<tr><td colspan="6" class="muted">Loading...</td></tr>';
+        rowsEl.innerHTML = `<tr><td colspan="${columns.length || 6}" class="muted">Loading...</td></tr>`;
         await loadSheet();
       });
     });

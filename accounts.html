@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Manage Accounts — Dispatch Board</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="firebase-config.js"></script>
+  <script type="module" src="auth.js"></script>
+  <style>
+    body{padding:0;margin:0;}
+    .page-shell{max-width:1040px;margin:0 auto;padding:28px;}
+    .page-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:18px;}
+    .page-head h1{font-family:'Space Grotesk',sans-serif;font-size:24px;margin:0;}
+    .page-head p{margin:4px 0 0;color:var(--text-dim);font-size:13px;}
+    .page-actions{display:flex;align-items:center;gap:10px;}
+    .back-link{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 12px;border-radius:999px;cursor:pointer;font-size:13px;text-decoration:none;transition:background .15s ease,border-color .15s ease;}
+    .back-link:hover{background:var(--hover);}
+    .status-box{background:var(--card);border:1px solid var(--line-2);border-radius:6px;padding:10px 14px;font-size:13px;color:var(--text-dim);}
+    .search-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
+    .search-row input{width:100%;max-width:360px;padding:10px 12px;border:1px solid var(--line);border-radius:3px;font-family:'IBM Plex Sans';font-size:13px;background:var(--card);color:var(--text);}
+    .search-row input:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 3px rgba(232,163,61,.15);}
+    .count-badge{font-size:13px;color:var(--text-dim);margin-left:auto;}
+    .accounts-list{display:flex;flex-direction:column;gap:14px;}
+    .account-card{background:var(--card);border:1px solid var(--line-2);border-radius:8px;padding:16px 18px;transition:transform .25s cubic-bezier(.22,.61,.36,1),box-shadow .25s ease,border-color .25s ease;}
+    .account-card:hover{transform:translateY(-2px);box-shadow:0 10px 24px var(--shadow);}
+    .account-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px;}
+    .account-email{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:15px;word-break:break-all;}
+    .account-name{font-size:12.5px;color:var(--text-dim);margin-top:2px;}
+    .account-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+    .role-chip{display:inline-flex;align-items:center;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;}
+    .role-admin{background:rgba(232,163,61,.16);color:var(--amber-deep);}
+    .role-user{background:rgba(148,163,184,.16);color:#64748b;}
+    .account-opts{display:flex;gap:24px;flex-wrap:wrap;margin-bottom:14px;}
+    .account-group{min-width:200px;}
+    .account-group-title{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin-bottom:8px;}
+    .access-check{display:inline-flex;align-items:center;gap:6px;margin:0 12px 8px 0;font-size:13px;cursor:pointer;}
+    .access-check input{width:15px;height:15px;accent-color:var(--amber-deep);cursor:pointer;}
+    .account-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--line-2);padding-top:12px;}
+    .account-msg{font-size:12.5px;margin-left:auto;min-height:16px;}
+    .account-msg.ok{color:var(--teal);}
+    .account-msg.err{color:var(--brick);}
+    .empty{text-align:center;color:var(--text-dim);padding:40px 16px;border:1px dashed var(--line-2);border-radius:8px;}
+    .error-box{color:var(--brick);}
+    .btn-ghost[disabled],.btn-primary[disabled]{opacity:.5;cursor:not-allowed;}
+  </style>
+</head>
+<body>
+  <div class="page-shell">
+    <div class="page-head">
+      <div>
+        <h1>Manage Accounts</h1>
+        <p>Edit hub &amp; action access for signed-in accounts, or remove their access.</p>
+      </div>
+      <div class="page-actions">
+        <a class="back-link" href="index.html">← Back to Dispatch Board</a>
+        <div class="status-box" id="statusBox">Loading accounts…</div>
+      </div>
+    </div>
+
+    <div class="search-row">
+      <input type="text" id="searchInput" placeholder="Search by email or name…">
+      <span class="count-badge" id="countBadge"></span>
+    </div>
+
+    <div class="accounts-list" id="accountsList"></div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script type="module">
+    const __perms = await window.Auth.guard();
+    if (!__perms) throw new Error('redirect');
+    if (__perms.role !== 'admin') {
+      window.location.href = 'index.html';
+      throw new Error('not admin');
+    }
+    const Auth = window.Auth;
+    const ALL_HUBS = Auth.ALL_HUBS;
+    const ALL_ACTIONS = Auth.ALL_ACTIONS;
+
+    if (typeof window.applySavedTheme === 'function') window.applySavedTheme();
+
+    const statusBox = document.getElementById('statusBox');
+    const listEl = document.getElementById('accountsList');
+    const searchEl = document.getElementById('searchInput');
+    const countBadge = document.getElementById('countBadge');
+    const toast = document.getElementById('toast');
+    const currentUid = Auth.currentUser() ? Auth.currentUser().uid : null;
+
+    function escapeHtml(value) {
+      return String(value || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    }
+
+    function showToast(html) {
+      toast.innerHTML = html;
+      toast.classList.add('show');
+      clearTimeout(toast._timer);
+      toast._timer = setTimeout(() => toast.classList.remove('show'), 3200);
+    }
+
+    function fmtDate(value) {
+      if (!value) return '';
+      const d = value.toDate ? value.toDate() : new Date(value);
+      if (isNaN(d)) return '';
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    function accountCardHtml(acc) {
+      const hubs = ALL_HUBS.map(h =>
+        `<label class="access-check"><input type="checkbox" data-type="hub" value="${escapeHtml(h)}" ${ (acc.hubs || []).includes(h) ? 'checked' : '' }> ${escapeHtml(h)}</label>`
+      ).join('');
+      const actions = ALL_ACTIONS.map(a =>
+        `<label class="access-check"><input type="checkbox" data-type="action" value="${escapeHtml(a)}" ${ (acc.actions && acc.actions[a]) ? 'checked' : '' }> ${escapeHtml(a)}</label>`
+      ).join('');
+      const isSelf = acc.uid === currentUid;
+      const isAdminAcct = acc.role === 'admin';
+      return `<div class="account-card" data-uid="${escapeHtml(acc.uid)}">
+        <div class="account-head">
+          <div>
+            <div class="account-email">${escapeHtml(acc.email || acc.id)}</div>
+            ${acc.name ? `<div class="account-name">${escapeHtml(acc.name)}</div>` : ''}
+          </div>
+          <div class="account-meta">
+            <span class="role-chip ${isAdminAcct ? 'role-admin' : 'role-user'}">${isAdminAcct ? 'Admin' : 'User'}</span>
+          </div>
+        </div>
+        <div class="account-opts">
+          <div class="account-group"><div class="account-group-title">Hubs</div>${hubs}</div>
+          <div class="account-group"><div class="account-group-title">Actions</div>${actions}</div>
+        </div>
+        <div class="account-actions">
+          <button class="btn-primary" data-act="save" type="button">Save changes</button>
+          <button class="btn-ghost" data-act="remove" type="button" ${isSelf ? 'disabled title="You can\'t remove your own access"' : ''}>Remove access</button>
+          <span class="account-msg" data-msg></span>
+        </div>
+      </div>`;
+    }
+
+    function render(list) {
+      if (!list.length) {
+        listEl.innerHTML = '<div class="empty">No signed-in accounts found.</div>';
+        countBadge.textContent = '';
+        return;
+      }
+      listEl.innerHTML = list.map(accountCardHtml).join('');
+
+      listEl.querySelectorAll('.account-card').forEach(card => {
+        const uid = card.dataset.uid;
+        const msgEl = card.querySelector('[data-msg]');
+
+        card.querySelector('[data-act="save"]').addEventListener('click', async () => {
+          const hubs = Array.from(card.querySelectorAll('input[data-type="hub"]:checked')).map(i => i.value);
+          const actions = {};
+          ALL_ACTIONS.forEach(a => {
+            const box = card.querySelector(`input[data-type="action"][value="${a}"]`);
+            actions[a] = !!box && box.checked;
+          });
+          if (hubs.length === 0) {
+            msgEl.textContent = 'Select at least one hub.';
+            msgEl.className = 'account-msg err';
+            return;
+          }
+          msgEl.textContent = 'Saving…';
+          msgEl.className = 'account-msg';
+          try {
+            await Auth.setPerms(uid, { hubs, actions, status: 'approved' });
+            msgEl.textContent = 'Saved.';
+            msgEl.className = 'account-msg ok';
+            showToast('Access updated.');
+          } catch (e) {
+            msgEl.textContent = 'Could not save: ' + (e.message || 'error');
+            msgEl.className = 'account-msg err';
+          }
+        });
+
+        const removeBtn = card.querySelector('[data-act="remove"]');
+        if (removeBtn && !removeBtn.disabled) {
+          removeBtn.addEventListener('click', async () => {
+            if (!confirm(`Remove access for "${card.querySelector('.account-email').textContent}"? They will no longer be able to log in.`)) return;
+            removeBtn.disabled = true;
+            msgEl.textContent = 'Removing…';
+            msgEl.className = 'account-msg';
+            try {
+              await Auth.removeAccess(uid);
+              showToast('Access removed.');
+              loadAccounts();
+            } catch (e) {
+              msgEl.textContent = 'Could not remove: ' + (e.message || 'error');
+              msgEl.className = 'account-msg err';
+              removeBtn.disabled = false;
+            }
+          });
+        }
+      });
+    }
+
+    let allAccounts = [];
+    function applySearch() {
+      const q = (searchEl.value || '').toLowerCase().trim();
+      const filtered = q
+        ? allAccounts.filter(a =>
+            String(a.email || '').toLowerCase().includes(q) ||
+            String(a.name || '').toLowerCase().includes(q))
+        : allAccounts;
+      countBadge.textContent = filtered.length + ' of ' + allAccounts.length + ' accounts';
+      render(filtered);
+    }
+
+    async function loadAccounts() {
+      statusBox.textContent = 'Loading accounts…';
+      try {
+        allAccounts = await Auth.listAccounts();
+        statusBox.textContent = allAccounts.length + ' signed-in account' + (allAccounts.length === 1 ? '' : 's');
+        applySearch();
+      } catch (e) {
+        statusBox.innerHTML = '<span class="error-box">Could not load accounts.</span>';
+        listEl.innerHTML = '<div class="empty error-box">Failed to load accounts. Check your connection and try again.</div>';
+      }
+    }
+
+    searchEl.addEventListener('input', applySearch);
+    loadAccounts();
+  </script>
+
+  <!-- Shared Option Button / Options drawer (appears on all pages) -->
+  <script src="options-drawer.js" defer></script>
+</body>
+</html>
