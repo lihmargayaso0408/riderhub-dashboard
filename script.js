@@ -111,7 +111,7 @@
   }
 
   /* ---------------- Storage helpers ---------------- */
-  const HUBS = ['Bauko','Buguias'];
+  const HUBS = ['Bauko','MB Atok','Buguias'];
 
   const hasFirebaseStorage = !!(window.firebaseAPI && window.firebaseAPI.isEnabled && window.firebaseAPI.isEnabled());
 
@@ -139,8 +139,8 @@
   };
 
   async function getIndex(){
-    try{ const r = await storage.get('hubs-index', false); return r? JSON.parse(r.value) : {Bauko:[],Buguias:[]}; }
-    catch(e){ return {Bauko:[],Buguias:[]}; }
+    try{ const r = await storage.get('hubs-index', false); return r? JSON.parse(r.value) : {Bauko:[],'MB Atok':[],Buguias:[]}; }
+    catch(e){ return {Bauko:[],'MB Atok':[],Buguias:[]}; }
   }
   async function saveIndex(idx){ await storage.set('hubs-index', JSON.stringify(idx), false); }
   async function saveSnapshot(hub,date,rows){
@@ -172,7 +172,7 @@
 
   function getExportDates(hub){
     if(hub === 'All'){
-      return Array.from(new Set([...(state.hubIndex.Bauko||[]), ...(state.hubIndex.Buguias||[])])).sort();
+      return Array.from(new Set([...(state.hubIndex.Bauko||[]), ...(state.hubIndex['MB Atok']||[]), ...(state.hubIndex.Buguias||[])])).sort();
     }
     return (state.hubIndex[hub]||[]).slice().sort();
   }
@@ -293,11 +293,11 @@
   }
 
   const state = {
-    hubIndex: {Bauko:[],Buguias:[]},
+    hubIndex: {Bauko:[],'MB Atok':[],Buguias:[]},
     currentHub: 'All',
     currentDate: null,
     rows: [],
-    summaries: {Bauko:[],Buguias:[]},
+    summaries: {Bauko:[],'MB Atok':[],Buguias:[]},
     sortKey: 'deliverySuccessRate',
     sortDir: 'desc',
     search: '',
@@ -338,6 +338,10 @@ function fmtWeekLabel(d){
   }
 
   async function init(){
+    const perms = await window.Auth.guard();
+    if(!perms) return; // redirected to login
+    state.perms = perms;
+
     if(!hasFirebaseStorage){
       $('#storageBanner').innerHTML = `<div class="banner">
         <span>Firebase is not configured yet. Please add your Firebase config before uploading manifests.</span>
@@ -349,33 +353,151 @@ function fmtWeekLabel(d){
     window.addEventListener('error', function(e){
       showToast('Something went wrong: ' + (e.message || 'unknown error'));
     });
-const theme = await loadTheme();
+    const theme = await loadTheme();
     applyTheme(theme);
     state.hubIndex = await getIndex();
     state.summaries.Bauko = await getSummary('Bauko');
+    state.summaries['MB Atok'] = await getSummary('MB Atok');
     state.summaries.Buguias = await getSummary('Buguias');
     // Build rider name -> Area lookup from the Riders & Agency sheet
-areaLookup = await buildAreaLookup();
+    areaLookup = await buildAreaLookup();
     pnrLookup = await buildPnrLookup();
-    setActiveTab('All');
+    applyAccessControl(perms);
     await refreshView();
     wireStaticEvents();
+    if(perms.role === 'admin') refreshAccessBadge();
   }
 
   function setActiveTab(hub){
     state.currentHub = hub;
-    $$('.route-stop').forEach(el=>el.classList.toggle('active', el.dataset.hub===hub));
+    $$('.route-stop').forEach(el=>{
+      el.classList.toggle('active', el.dataset.hub===hub);
+      el.setAttribute('aria-pressed', el.dataset.hub===hub ? 'true' : 'false');
+    });
+  }
+
+  function allowedHubs(){
+    return (state.perms && state.perms.hubs && state.perms.hubs.length) ? state.perms.hubs : HUBS;
   }
 
   function allDatesForCurrentHub(){
     if(state.currentHub==='All'){
-      const set = new Set([...(state.hubIndex.Bauko||[]), ...(state.hubIndex.Buguias||[])]);
+      const set = new Set();
+      allowedHubs().forEach(hub => { (state.hubIndex[hub]||[]).forEach(d => set.add(d)); });
       return Array.from(set).sort();
     }
     return (state.hubIndex[state.currentHub]||[]).slice().sort();
   }
 
   function latestDate(list){ return list.length ? list[list.length-1] : null; }
+
+  function applyAccessControl(perms){
+    // Hide route stops the user isn't allowed to view.
+    const allowed = allowedHubs();
+    $$('.route-stop').forEach(el=>{
+      const hub = el.dataset.hub;
+      const ok = hub==='All' ? allowed.length>1 : allowed.includes(hub);
+      el.style.display = ok ? '' : 'none';
+    });
+    state.currentHub = allowed.length>1 ? 'All' : (allowed[0]||'All');
+    setActiveTab(state.currentHub);
+
+    // Hide action buttons the user isn't allowed to use.
+    const actions = perms.actions || {};
+    if(!actions.upload){ const b=$('#openUploadBtn'); if(b) b.style.display='none'; }
+    if(!actions.delete){ const b=$('#deleteDateMenuBtn'); if(b) b.style.display='none'; }
+    if(!actions.download){ const b=$('#downloadRecordsBtn'); if(b) b.style.display='none'; }
+
+    // Admin-only: Access Requests entry.
+    if(perms.role==='admin'){
+      const ab = $('#openAccessBtn'); if(ab) ab.style.display='';
+      setupAccessRequests();
+    }
+  }
+
+  function renderAccessList(){
+    const listEl = $('#accessList');
+    const msgEl = $('#accessModalMsg');
+    if(!listEl) return;
+    Auth.listPending().then(pending=>{
+      refreshAccessBadge();
+      if(!pending.length){
+        listEl.innerHTML = '<div class="access-empty">No pending access requests.</div>';
+        return;
+      }
+      listEl.innerHTML = pending.map(p=>{
+        const hubs = Auth.ALL_HUBS.map(h=>`<label class="access-check"><input type="checkbox" data-uid="${p.uid}" data-type="hub" value="${h}"> ${h}</label>`).join('');
+        const acts = Auth.ALL_ACTIONS.map(a=>`<label class="access-check"><input type="checkbox" data-uid="${p.uid}" data-type="action" value="${a}"> ${a}</label>`).join('');
+        const created = p.createdAt && p.createdAt.toDate ? p.createdAt.toDate().toLocaleString() : '';
+        return `<div class="access-row" data-uid="${p.uid}">
+          <div class="access-head">
+            <span class="access-email">${escapeHtml(p.email||p.id)}</span>
+            <span class="access-meta">${created?('Requested '+created):''}</span>
+          </div>
+          <div class="access-opts">
+            <div class="access-group"><div class="access-group-title">Hubs</div>${hubs}</div>
+            <div class="access-group"><div class="access-group-title">Actions</div>${acts}</div>
+          </div>
+          <div class="access-actions">
+            <button class="btn-primary" data-act="approve" data-uid="${p.uid}">Approve</button>
+            <button class="btn-ghost" data-act="reject" data-uid="${p.uid}">Reject</button>
+          </div>
+        </div>`;
+      }).join('');
+
+      listEl.querySelectorAll('button[data-act]').forEach(btn=>{
+        btn.addEventListener('click', async ()=>{
+          const uid = btn.dataset.uid;
+          const act = btn.dataset.act;
+          if(act==='reject'){
+            await Auth.reject(uid);
+            renderAccessList();
+            showToast('Request rejected.');
+            return;
+          }
+          const row = listEl.querySelector(`.access-row[data-uid="${uid}"]`);
+          const hubs = Array.from(row.querySelectorAll('input[data-type="hub"]:checked')).map(i=>i.value);
+          const actions = {};
+          Auth.ALL_ACTIONS.forEach(a=>{
+            const box = row.querySelector(`input[data-type="action"][value="${a}"]`);
+            actions[a] = !!box && box.checked;
+          });
+          if(hubs.length===0){ msgEl.textContent='Select at least one hub.'; msgEl.className='modal-msg err'; return; }
+          await Auth.setPerms(uid, { hubs, actions, status:'approved' });
+          renderAccessList();
+          showToast('Access approved.');
+        });
+      });
+    }).catch(err=>{
+      listEl.innerHTML = '<div class="access-empty error">Could not load requests.</div>';
+    });
+  }
+
+  function refreshAccessBadge(){
+    const badge = $('#accessBadge');
+    if(!badge) return;
+    Auth.listPending().then(pending=>{
+      if(pending.length){
+        badge.textContent = pending.length;
+        badge.style.display='';
+      } else {
+        badge.style.display='none';
+      }
+    }).catch(()=>{ badge.style.display='none'; });
+  }
+
+  function setupAccessRequests(){
+    const btn = $('#openAccessBtn');
+    const overlay = $('#accessOverlay');
+    if(!btn || !overlay) return;
+    btn.addEventListener('click', ()=>{
+      closeSettingsMenu();
+      overlay.classList.add('show');
+      renderAccessList();
+    });
+    $('#closeAccess').addEventListener('click', ()=> overlay.classList.remove('show'));
+    overlay.addEventListener('click', e=>{ if(e.target.id==='accessOverlay') overlay.classList.remove('show'); });
+  }
 
   async function refreshView(){
     const dates = allDatesForCurrentHub();
@@ -396,7 +518,7 @@ areaLookup = await buildAreaLookup();
       dateSelect.value = state.currentDate;
     }
 
-    $('#viewTitle').textContent = state.currentHub==='All' ? 'Both hubs' : state.currentHub;
+    $('#viewTitle').textContent = state.currentHub==='All' ? 'All Hubs' : state.currentHub;
     $('#viewSub').textContent = state.currentDate ? `Snapshot for ${fmtWeekLabel(state.currentDate)}` : 'Snapshot for —';
 
     if(dates.length===0){
@@ -407,7 +529,7 @@ areaLookup = await buildAreaLookup();
 
     let rows = [];
     if(state.currentHub==='All'){
-      for(const hub of HUBS){
+      for(const hub of allowedHubs()){
         const hd = state.hubIndex[hub]||[];
         const useDate = hd.includes(state.currentDate) ? state.currentDate : latestDate(hd);
         if(useDate){
@@ -454,7 +576,7 @@ state.rows = rows;
   }
 
   function updateLastUpdatedNote(){
-    const all = [...(state.hubIndex.Bauko||[]), ...(state.hubIndex.Buguias||[])];
+    const all = [...(state.hubIndex.Bauko||[]), ...(state.hubIndex['MB Atok']||[]), ...(state.hubIndex.Buguias||[])];
     if(all.length===0){ $('#lastUpdatedNote').textContent = 'No manifests uploaded yet.'; return; }
     const latest = all.sort().slice(-1)[0];
     $('#lastUpdatedNote').textContent = `Latest manifest on file: ${fmtDate(latest)}`;
@@ -896,10 +1018,10 @@ cells.forEach((day, index)=>{
     const today = new Date();
     const monday = startOfWeek(today);
     if(!$('#dateInput').value){ $('#dateInput').value = toISODate(monday); }
-    state.weekPickerSelectedDate = state.weekPickerSelectedDate || toISODate(today);
+    state.weekPickerSelectedDate = toISODate(today);
     state.weekPickerMonth = new Date(monday.getFullYear(), monday.getMonth(), 1);
     renderWeekPicker();
-    if(state.currentHub==='Bauko' || state.currentHub==='Buguias') $('#hubSelect').value = state.currentHub;
+    if(state.currentHub==='Bauko' || state.currentHub==='MB Atok' || state.currentHub==='Buguias') $('#hubSelect').value = state.currentHub;
   }
   function closeModal(){ $('#overlay').classList.remove('show'); }
 
@@ -1056,8 +1178,8 @@ cells.forEach((day, index)=>{
       try{ await storage.delete(`summary:${hub}`, false); }catch(e){}
     }
     try{ await storage.delete('hubs-index', false); }catch(e){}
-    state.hubIndex = {Bauko:[],Buguias:[]};
-    state.summaries = {Bauko:[],Buguias:[]};
+    state.hubIndex = {Bauko:[],'MB Atok':[],Buguias:[]};
+    state.summaries = {Bauko:[],'MB Atok':[],Buguias:[]};
     state.currentDate = null;
     await refreshView();
     showToast('All stored data cleared.');
@@ -1067,7 +1189,7 @@ cells.forEach((day, index)=>{
 const RIDERS_SHEET_ID = '1aGJXuO3tz5oLJyL6piEljz4A6cg6l0cnKvmtIpLkqMI';
   const PNR_SHEET_ID = '1aGJXuO3tz5oLJyL6piEljz4A6cg6l0cnKvmtIpLkqMI';
   const PNR_SHEET_NAME = 'PNR';
-  const RIDERS_HUB_SHEET = { Buguias:'Buguias', Bauko:'Bauko' };
+  const RIDERS_HUB_SHEET = { Buguias:'Buguias', Bauko:'Bauko', 'MB Atok':'MB Atok' };
 const riders = {
     allRows: [],
     currentHub: 'Buguias',
@@ -1492,6 +1614,10 @@ $('#openLossReportBtn').addEventListener('click', ()=>{
       closeSettingsMenu();
       window.location.href = 'pnr.html';
     });
+    $('#openAreaMapBtn').addEventListener('click', ()=>{
+      closeSettingsMenu();
+      window.location.href = 'area-map.html';
+    });
     $('#cancelUpload').addEventListener('click', closeModal);
     $('#weekPrevBtn').addEventListener('click', ()=>{
       state.weekPickerMonth = new Date(state.weekPickerMonth.getFullYear(), state.weekPickerMonth.getMonth() - 1, 1);
@@ -1595,6 +1721,12 @@ $('#downloadHubSelect').addEventListener('change', populateDownloadWeekOptions);
       applyTheme(next);
       await saveTheme(next);
       if(state.rows.length) renderContent();
+    });
+
+    $('#logoutBtn').addEventListener('click', async ()=>{
+      closeSettingsMenu();
+      try{ await window.Auth.logout(); }catch(e){}
+      window.location.href = 'login.html';
     });
   }
 

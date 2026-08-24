@@ -6,7 +6,9 @@
   <title>Loss Report per Hub</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css">
+    <script src="firebase-config.js"></script>
+    <script type="module" src="auth.js"></script>
   <style>
     body{padding:0;margin:0;}
     .page-shell{max-width:1440px;margin:0 auto;padding:28px;}
@@ -74,6 +76,7 @@
     </div>
     <div class="tabs" id="hubTabs">
       <button class="tab-btn active" data-hub="Buguias" type="button">Buguias</button>
+      <button class="tab-btn" data-hub="MB Atok" type="button">MB Atok</button>
       <button class="tab-btn" data-hub="Bauko" type="button">Bauko</button>
     </div>
     <div class="stats-row" id="statsRow"></div>
@@ -107,9 +110,11 @@
     </div>
   </div>
 
-  <script>
+  <script type="module">
+    const __perms = await window.Auth.guard();
+    if (!__perms) throw new Error('redirect');
     const LOSS_SHEET_ID = '1Y-Okr8YoWQx-xbylmUHndT-xVTUtHzDP6cejtTOXzEU';
-    const HUB_SHEET_NAME = { Buguias: 'Buguias', Bauko: 'Bauko' };
+    const HUB_SHEET_NAME = { Buguias: 'Buguias', Bauko: 'Bauko', 'MB Atok': 'MB Atok' };
 
     const statusEl = document.getElementById('sheetStatus');
     const rowsEl = document.getElementById('lossRows');
@@ -119,7 +124,20 @@ const searchEl = document.getElementById('searchInput');
     const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
     const sortableHeaders = Array.from(document.querySelectorAll('th[data-sort]'));
 
-let allRows = [];
+    function applyHubFilter(){
+      const allowed = (__perms && __perms.hubs && __perms.hubs.length) ? __perms.hubs : ['Buguias','MB Atok','Bauko'];
+      tabButtons.forEach(btn=>{
+        const hub = btn.dataset.hub;
+        const ok = allowed.includes(hub) || (hub==='All' && allowed.length>1);
+        btn.style.display = ok ? '' : 'none';
+      });
+      if(!allowed.includes(currentHub)){
+        currentHub = allowed[0] || currentHub;
+        tabButtons.forEach(b=>b.classList.toggle('active', b.dataset.hub===currentHub));
+      }
+    }
+
+    let allRows = [];
     let currentHub = 'Buguias';
     let search = '';
     let selectedMonth = '';
@@ -416,25 +434,10 @@ String(r.RTS_identifier || '').toLowerCase().includes(q) ||
       }).join('');
     }
 
-// Apply the shared theme (controlled only from the dashboard's option/settings drawer)
-    function applySavedTheme() {
-      const savedTheme = getSavedTheme();
-      const isDark = savedTheme === 'dark' || (savedTheme === null && window.matchMedia('(prefers-color-scheme: dark)').matches);
-      document.body.classList.toggle('dark', isDark);
-    }
+    // Apply the shared theme (defined by options-drawer.js, which loads deferred)
+    if (typeof window.applySavedTheme === 'function') window.applySavedTheme();
 
-    function getSavedTheme() {
-      try {
-        const raw = localStorage.getItem('hub-theme');
-        if (raw === null || raw === undefined) return null;
-        // The dashboard stores the theme as a JSON string (e.g. "\"dark\""), so try to parse it.
-        try { return JSON.parse(raw); } catch (e) { return raw; }
-      } catch (err) { return null; }
-    }
-
-    applySavedTheme();
-
-searchEl.addEventListener('input', e => { search = e.target.value; renderRows(); });
+    searchEl.addEventListener('input', e => { search = e.target.value; renderRows(); });
 
     monthFilterEl.addEventListener('change', e => {
       selectedMonth = e.target.value;
@@ -462,6 +465,7 @@ rowsEl.innerHTML = '<tr><td colspan="13" class="muted">Loading...</td></tr>';
       });
     });
 
+    applyHubFilter();
     loadSheet();
   </script>
 

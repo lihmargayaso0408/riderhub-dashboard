@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign in — Dispatch Board</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;}
+    .login-card{
+      background:var(--card);border:1px solid var(--line-2);border-radius:10px;
+      max-width:400px;width:100%;padding:30px;box-shadow:0 18px 50px var(--shadow);
+      animation:fadeUp .5s cubic-bezier(.22,.61,.36,1) both;
+    }
+    .login-card .brand-eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--amber);margin:0 0 6px;}
+    .login-card h1{font-family:'Space Grotesk',sans-serif;font-size:22px;margin:0 0 4px;}
+    .login-card .sub{color:var(--text-dim);font-size:13px;margin:0 0 20px;}
+    .login-field{margin-bottom:14px;}
+    .login-field label{display:block;font-size:12px;font-weight:600;margin-bottom:6px;}
+    .login-field input{
+      width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:3px;
+      font-family:inherit;font-size:14px;background:var(--card);color:var(--text);
+      transition:border-color .2s ease,box-shadow .2s ease;
+    }
+    .login-field input:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 3px rgba(232,163,61,.15);}
+    .login-actions{display:flex;gap:10px;margin-top:18px;}
+    .login-actions .btn-primary{flex:1;}
+    .login-msg{font-size:13px;margin-top:14px;min-height:18px;}
+    .login-msg.err{color:var(--brick);}
+    .login-msg.ok{color:var(--teal);}
+    .login-msg.info{color:var(--text-dim);}
+    .login-foot{margin-top:18px;font-size:12px;color:var(--text-dim);text-align:center;}
+    .login-foot a{color:var(--amber-deep);}
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <p class="brand-eyebrow">LG'S FLEET VIEW</p>
+    <h1>Dispatch Board</h1>
+    <p class="sub">Sign in with your account. New here? Request access and the owner will be notified.</p>
+
+    <div class="login-field">
+      <label for="email">Email</label>
+      <input type="email" id="email" autocomplete="username" placeholder="you@company.com">
+    </div>
+    <div class="login-field">
+      <label for="password">Password</label>
+      <input type="password" id="password" autocomplete="current-password" placeholder="••••••••">
+    </div>
+
+    <div class="login-msg" id="loginMsg"></div>
+
+    <div class="login-actions">
+      <button class="btn-primary" id="signInBtn" type="button">Sign in</button>
+      <button class="btn-ghost" id="requestBtn" type="button">Request access</button>
+    </div>
+
+    <div class="login-foot">
+      <a href="index.html">Back to dashboard</a>
+    </div>
+  </div>
+
+  <script src="firebase-config.js"></script>
+  <script type="module" src="firebase-client.js"></script>
+  <script type="module" src="auth.js"></script>
+  <script type="module">
+    const msgEl = document.getElementById('loginMsg');
+    const emailEl = document.getElementById('email');
+    const passEl = document.getElementById('password');
+    const signInBtn = document.getElementById('signInBtn');
+    const requestBtn = document.getElementById('requestBtn');
+
+    function setMsg(text, type) { msgEl.textContent = text; msgEl.className = 'login-msg' + (type ? ' ' + type : ''); }
+
+    // Surface messages from redirects (?state=pending / ?state=rejected).
+    const params = new URLSearchParams(location.search);
+    if (params.get('state') === 'pending') setMsg('Your access request is pending approval. The owner has been notified.', 'info');
+    else if (params.get('state') === 'rejected') setMsg('Your access request was rejected. Contact the owner for help.', 'err');
+
+    // If already signed in & approved, go straight to the dashboard.
+    Auth.onAuthChange(async (user) => {
+      if (!user) return;
+      try {
+        const profile = await Auth.getProfile(user.uid);
+        if (profile && profile.status === 'approved') {
+          if (!Auth.ADMIN_EMAILS.includes((user.email || '').toLowerCase())) {
+            location.href = 'index.html';
+          } else {
+            location.href = 'index.html';
+          }
+        }
+      } catch (e) { /* ignore */ }
+    });
+
+    signInBtn.addEventListener('click', async () => {
+      const email = emailEl.value.trim();
+      const password = passEl.value;
+      if (!email || !password) { setMsg('Enter your email and password.', 'err'); return; }
+      signInBtn.disabled = true; requestBtn.disabled = true; setMsg('Signing in…', 'info');
+      try {
+        await Auth.login(email, password);
+        // guard() will redirect based on status.
+        const profile = await Auth.guard();
+        if (profile) location.href = 'index.html';
+      } catch (e) {
+        setMsg(e.message || 'Sign in failed.', 'err');
+        signInBtn.disabled = false; requestBtn.disabled = false;
+      }
+    });
+
+    requestBtn.addEventListener('click', async () => {
+      const email = emailEl.value.trim();
+      const password = passEl.value;
+      if (!email || !password) { setMsg('Enter an email and a password (min 6 chars).', 'err'); return; }
+      if (password.length < 6) { setMsg('Password must be at least 6 characters.', 'err'); return; }
+      signInBtn.disabled = true; requestBtn.disabled = true; setMsg('Sending access request…', 'info');
+      try {
+        await Auth.register(email, password);
+        setMsg('Request sent! The owner has been notified by email and in the dashboard. You’ll be redirected once approved.', 'ok');
+        setTimeout(() => { location.href = 'login.html?state=pending'; }, 2500);
+      } catch (e) {
+        setMsg(e.message || 'Could not send request.', 'err');
+        signInBtn.disabled = false; requestBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

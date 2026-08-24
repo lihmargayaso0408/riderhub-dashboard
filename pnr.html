@@ -6,7 +6,9 @@
   <title>PNR of Riders</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css">
+    <script src="firebase-config.js"></script>
+    <script type="module" src="auth.js"></script>
   <style>
     body{padding:0;margin:0;}
     .page-shell{max-width:1440px;margin:0 auto;padding:28px;}
@@ -81,6 +83,7 @@
     </div>
     <div class="tabs" id="hubTabs">
       <button class="tab-btn active" data-hub="Buguias" type="button">Buguias</button>
+      <button class="tab-btn" data-hub="MB Atok" type="button">MB Atok</button>
       <button class="tab-btn" data-hub="MB Mankayan" type="button">MB Mankayan</button>
       <button class="tab-btn" data-hub="Bauko" type="button">Bauko</button>
     </div>
@@ -109,7 +112,9 @@
     </div>
   </div>
 
-  <script>
+  <script type="module">
+    const __perms = await window.Auth.guard();
+    if (!__perms) throw new Error('redirect');
     const PNR_SHEET_ID = '1aGJXuO3tz5oLJyL6piEljz4A6cg6l0cnKvmtIpLkqMI';
     const PNR_SHEET_NAME = 'PNR';
 
@@ -121,7 +126,20 @@
     const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
     const sortableHeaders = Array.from(document.querySelectorAll('th[data-sort]'));
 
-let allRows = [];
+    function applyHubFilter(){
+      const allowed = (__perms && __perms.hubs && __perms.hubs.length) ? __perms.hubs : ['Buguias','MB Atok','Bauko'];
+      tabButtons.forEach(btn=>{
+        const hub = btn.dataset.hub;
+        const ok = allowed.includes(hub) || (hub==='All' && allowed.length>1);
+        btn.style.display = ok ? '' : 'none';
+      });
+      if(!allowed.includes(currentHub)){
+        currentHub = allowed[0] || currentHub;
+        tabButtons.forEach(b=>b.classList.toggle('active', b.dataset.hub===currentHub));
+      }
+    }
+
+    let allRows = [];
     let currentHub = 'Buguias';
     let search = '';
     let selectedMonth = '';
@@ -400,22 +418,7 @@ const totalAmount = rows
       }).join('');
     }
 
-    // Apply the shared theme (controlled only from the dashboard's option/settings drawer)
-    function applySavedTheme() {
-      const savedTheme = getSavedTheme();
-      const isDark = savedTheme === 'dark' || (savedTheme === null && window.matchMedia('(prefers-color-scheme: dark)').matches);
-      document.body.classList.toggle('dark', isDark);
-    }
-
-    function getSavedTheme() {
-      try {
-        const raw = localStorage.getItem('hub-theme');
-        if (raw === null || raw === undefined) return null;
-        try { return JSON.parse(raw); } catch (e) { return raw; }
-      } catch (err) { return null; }
-    }
-
-applySavedTheme();
+    if (typeof window.applySavedTheme === 'function') window.applySavedTheme();
 
     // Read optional query params (?rider=...&hub=...) passed from the dashboard's PNR link
     (function applyQueryParams() {
@@ -469,6 +472,7 @@ const params = new URLSearchParams(window.location.search);
       });
     });
 
+    applyHubFilter();
     loadSheet();
   </script>
 

@@ -1,8 +1,8 @@
 // firebase-client.js
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-const app = initializeApp(window.FIREBASE_CONFIG);
+const app = getApps().length ? getApps()[0] : initializeApp(window.FIREBASE_CONFIG);
 const db = getFirestore(app);
 
 window.firebaseAPI = {
