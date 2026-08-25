@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dispatch Board — Rider & Hub Performance</title>
+<title>Rider Performance System — Rider & Hub Performance</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
@@ -30,7 +30,7 @@
       </button>
       <div>
         <p class="brand-eyebrow">LG'S FLEET VIEW</p>
-        <h1 class="brand-title">Dispatch Board</h1>
+        <h1 class="brand-title">Rider Performance System</h1>
         <p class="brand-sub" id="lastUpdatedNote">No manifests uploaded yet.</p>
       </div>
     </div>
@@ -63,7 +63,33 @@
       <p id="viewSub">Snapshot for —</p>
     </div>
     <div class="meta-controls">
-      <select class="date-picker" id="dateSelect"></select>
+    <div class="date-picker-wrap" id="datePickerWrap">
+      <button type="button" class="date-picker-btn" id="datePickerBtn" aria-haspopup="true" aria-expanded="false">
+        <svg class="date-picker-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <span id="datePickerLabel">Select date</span>
+        <svg class="date-picker-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="date-picker-dropdown" id="datePickerDropdown">
+        <div class="date-picker-header">
+          <button type="button" class="date-picker-nav" id="datePickerPrev" aria-label="Previous month">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <span class="date-picker-month-label" id="datePickerMonthLabel">August 2026</span>
+          <button type="button" class="date-picker-nav" id="datePickerNext" aria-label="Next month">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+        <div class="date-picker-weekdays">
+          <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+        </div>
+        <div class="date-picker-grid" id="datePickerGrid"></div>
+      </div>
+    </div>
+      <div class="freq-toggle" id="freqToggle" role="group" aria-label="View frequency">
+        <button type="button" class="freq-btn" data-freq="daily">Daily</button>
+        <button type="button" class="freq-btn active" data-freq="weekly">Weekly</button>
+        <button type="button" class="freq-btn" data-freq="monthly">Monthly</button>
+      </div>
     </div>
   </div>
 
@@ -160,8 +186,8 @@
 <!-- Upload modal -->
 <div class="overlay" id="overlay">
   <div class="modal">
-    <h3>Upload weekly manifest</h3>
-    <p class="hint">Drop in the weekly performance CSV. It gets added to the hub's history — nothing gets overwritten unless the week matches.</p>
+     <h3>Upload daily manifest</h3>
+     <p class="hint">Drop in the daily performance CSV. It gets added to the hub's history for the selected date — nothing gets overwritten unless the date matches.</p>
     <div class="field">
       <label for="hubSelect">Hub</label>
       <select id="hubSelect">
@@ -171,7 +197,7 @@
       </select>
     </div>
     <div class="field">
-      <label for="dateInput">Week start (Monday)</label>
+       <label for="dateInput">Date</label>
       <div class="week-picker-card" id="weekPickerCard">
         <div class="week-picker-nav">
           <button type="button" id="weekPrevBtn" class="week-picker-nav-btn" aria-label="Previous month">‹</button>
@@ -185,7 +211,7 @@
         <input type="hidden" id="dateInput" value="">
         <div id="weekSelectionText" class="week-picker-selection">Selected week: —</div>
       </div>
-      <div id="weekHint" style="font-size:12px;color:var(--text-dim);margin-top:6px;">Choose any day in the week. The Monday start of that week will be stored.</div>
+       <div id="weekHint" style="font-size:12px;color:var(--text-dim);margin-top:6px;">Pick the date for this manifest. Today is highlighted.</div>
     </div>
     <div class="field">
       <label>File</label>
@@ -274,7 +300,7 @@
 <div class="overlay" id="accessOverlay">
   <div class="modal modal-wide">
     <h3>Access Requests</h3>
-    <p class="hint">Approve new users and choose which hubs and actions they can use.</p>
+    <p class="hint">Approve new users and choose which hubs, actions, and pages they can use.</p>
     <div class="modal-msg" id="accessModalMsg"></div>
     <div id="accessList" class="access-list"></div>
     <div class="modal-actions">

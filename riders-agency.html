@@ -82,7 +82,7 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text
         <p>Data is loaded from your Google Sheet and split by hub.</p>
       </div>
       <div class="page-actions">
-        <a class="back-link" href="index.html">← Back to Dispatch Board</a>
+        <a class="back-link" href="index.html">← Back to Rider Performance System</a>
         <div class="status-box" id="sheetStatus">Loading sheet…</div>
       </div>
     </div>
@@ -120,7 +120,7 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text
   </div>
 
   <script type="module">
-    const __perms = await window.Auth.guard();
+    const __perms = await window.Auth.guard('riders');
     if (!__perms) throw new Error('redirect');
     const SHEET_ID = '1aGJXuO3tz5oLJyL6piEljz4A6cg6l0cnKvmtIpLkqMI';
     const HUB_SHEET_NAME = {

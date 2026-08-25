@@ -66,17 +66,11 @@
     .map.placement-mode .leaflet-interactive, #map.placement-mode .leaflet-interactive{cursor:crosshair !important;}
 
     .rider-marker-icon{
-      display:flex;align-items:center;justify-content:center;
-      width:32px;height:32px;border-radius:50% 50% 50% 0;
-      transform:rotate(-45deg);border:2px solid #fff;
-      box-shadow:0 2px 8px rgba(0,0,0,.25);
+      width:18px;height:18px;border-radius:50%;
+      border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);
     }
     .rider-marker-wrapper{position:relative;background:none !important;border:none !important;}
     .leaflet-div-icon{background:none !important;border:none !important;}
-    .rider-marker-icon span{
-      transform:rotate(45deg);font-family:'IBM Plex Sans',sans-serif;
-      font-weight:700;font-size:12px;color:#fff;line-height:1;
-    }
     .rider-popup{font-family:'IBM Plex Sans',sans-serif;font-size:13px;min-width:180px;}
     .rider-popup h4{font-family:'Space Grotesk',sans-serif;margin:0 0 6px;font-size:14px;}
     .rider-popup .rider-meta{color:var(--text-dim);font-size:12px;margin-bottom:8px;}
@@ -100,7 +94,7 @@
         <p>Map of rider areas. Admin can use <b>Place Rider</b> to assign riders to specific locations by entering coordinates or clicking the map.</p>
       </div>
       <div class="page-actions">
-        <a class="back-link" href="index.html">← Back to Dispatch Board</a>
+        <a class="back-link" href="index.html">← Back to Rider Performance System</a>
         <div class="status-box" id="sheetStatus">Loading sheet…</div>
       </div>
     </div>
@@ -159,7 +153,7 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <script type="module">
-    const __perms = await window.Auth.guard();
+    const __perms = await window.Auth.guard('map');
     if (!__perms) throw new Error('redirect');
     const SHEET_ID = '1aGJXuO3tz5oLJyL6piEljz4A6cg6l0cnKvmtIpLkqMI';
     const HUB_SHEET_NAME = { Buguias: 'Buguias', Bauko: 'Bauko', 'MB Atok': 'MB Atok' };
@@ -256,7 +250,7 @@
           const snap = JSON.parse(snapRaw.value);
           if (snap && snap.rows) {
             snap.rows.forEach(row => {
-              const name = (row.name || '').trim();
+              const name = normName(row.name);
               if (name && row.deliverySuccessRate != null) {
                 riderSuccessRate[name] = parseFloat(row.deliverySuccessRate);
               }
@@ -284,6 +278,21 @@
 
     function escapeHtml(value) {
       return String(value || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    }
+
+    // Normalize a rider name for cross-sheet matching (dashboard snapshot <-> riders sheet).
+    function normName(s) {
+      return String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    }
+
+    // Color a success rate the same way the dashboard does.
+    function rateColor(v) {
+      const n = Number(v) || 0;
+      if (n >= 90) return '#16a34a';
+      if (n >= 80) return '#ca8a04';
+      if (n >= 70) return '#ea580c';
+      if (n >= 60) return '#ef4444';
+      return '#991b1b';
     }
 
     function findHeaderIndex(headers, candidates) {
@@ -390,14 +399,13 @@
     }
 
     function createRiderIcon(rider) {
-      const initial = String(rider.riderName || '?').charAt(0).toUpperCase();
       const color = HUB_COLOR[rider.hub] || '#5B6472';
       return L.divIcon({
         className: 'rider-marker-wrapper',
-        html: `<div class="rider-marker-icon" style="background:${color};"><span>${escapeHtml(initial)}</span></div>`,
-        iconSize: [32, 32],
-        iconAnchor: [16, 32],
-        popupAnchor: [0, -32]
+        html: `<div class="rider-marker-icon" style="background:${color};"></div>`,
+        iconSize: [18, 18],
+        iconAnchor: [9, 9],
+        popupAnchor: [0, -9]
       });
     }
 
@@ -419,19 +427,25 @@
     function renderPlacedRiders() {
       if (!placedRiderLayer || !map) return;
       placedRiderLayer.clearLayers();
+      const visiblePlaced = currentHub === 'All'
+        ? placedRiders
+        : placedRiders.filter(r => String(r.hub || '').toLowerCase() === currentHub.toLowerCase());
       const isAdmin = __perms && __perms.role === 'admin';
-      placedRiders.forEach(r => {
+      visiblePlaced.forEach(r => {
         const marker = L.marker([r.lat, r.lng], { icon: createRiderIcon(r) });
-        const successRate = r.successRate != null ? r.successRate + '%' : 'N/A';
+        const rate = r.successRate != null ? r.successRate : (riderSuccessRate[normName(r.riderName)] ?? null);
+        const successRate = rate != null ? rate + '%' : 'N/A';
+        const srStyle = rate != null ? `style="color:${rateColor(rate)};font-weight:700;"` : '';
+        const srHtml = `<b ${srStyle}>${escapeHtml(successRate)}</b>`;
         const tooltipContent = `<div class="rider-popup">
           <h4>${escapeHtml(r.riderName)}</h4>
           <div class="rider-meta">${escapeHtml(r.hub || '')} · ${escapeHtml(r.area || '')}</div>
-          <div class="rider-meta">Success Rate: <b>${escapeHtml(successRate)}</b></div>
+          <div class="rider-meta">SR: ${srHtml}</div>
         </div>`;
         const popupContent = isAdmin ? `<div class="rider-popup">
           <h4>${escapeHtml(r.riderName)}</h4>
           <div class="rider-meta">${escapeHtml(r.hub || '')} · ${escapeHtml(r.area || '')} · ${escapeHtml(r.agency || '')}</div>
-          <div class="rider-meta">Success Rate: <b>${escapeHtml(successRate)}</b></div>
+          <div class="rider-meta">SR: ${srHtml}</div>
           <button class="btn-remove" data-id="${escapeHtml(r.id)}">Remove</button>
         </div>` : tooltipContent;
         marker.bindTooltip(tooltipContent, { direction: 'top', opacity: 1, className: 'area-hover-tip' });
@@ -477,9 +491,9 @@
         tempMarker = L.marker([lat, lng], {
           icon: L.divIcon({
             className: 'rider-marker-wrapper',
-            html: `<div class="rider-marker-icon" style="background:#E8A33D;"><span>✓</span></div>`,
-            iconSize: [32, 32],
-            iconAnchor: [16, 32]
+            html: `<div class="rider-marker-icon" style="background:#E8A33D;"></div>`,
+            iconSize: [18, 18],
+            iconAnchor: [9, 9]
           })
         }).addTo(map);
         map.panTo([lat, lng]);
@@ -517,7 +531,7 @@
         hub: rider.hub,
         area: rider.area,
         agency: rider.agency,
-        successRate: riderSuccessRate[riderName] || null,
+        successRate: riderSuccessRate[normName(riderName)] ?? null,
         placedAt: new Date().toISOString()
       };
       placedRiders.push(record);
@@ -592,11 +606,17 @@
 
         const popupHtml = `<h4>${escapeHtml(a.area)}</h4>`
           + `<div class="muted" style="margin-bottom:6px;">${count} rider${count === 1 ? '' : 's'} · ${escapeHtml(a.hub)}</div>`
-          + a.riders.map(r => `
-              <div class="area-rider">
+          + a.riders.map(r => {
+              const rate = riderSuccessRate[normName(r.riderName)];
+              const rateHtml = rate != null
+                ? `<span class="agency">SR</span> <span class="area-count" style="color:${rateColor(rate)};">${rate}%</span>`
+                : `<span class="area-count muted">—</span>`;
+              const statusHtml = r.status ? `<span class="agency">${escapeHtml(r.status)}</span>` : '';
+              return `<div class="area-rider">
                 <span><b>${escapeHtml(r.riderName)}</b> <span class="agency">${escapeHtml(r.agency || '')}</span></span>
-                <span class="area-count">${escapeHtml(r.status || '')}</span>
-              </div>`).join('');
+                <span style="display:flex;align-items:center;gap:8px;">${statusHtml}${rateHtml}</span>
+              </div>`;
+            }).join('');
 
         const marker = L.circleMarker(initial, {
           radius,
@@ -608,6 +628,13 @@
 
         bounds.push(initial);
       }
+
+      const visiblePlaced = currentHub === 'All'
+        ? placedRiders
+        : placedRiders.filter(r => String(r.hub || '').toLowerCase() === currentHub.toLowerCase());
+      visiblePlaced.forEach(r => {
+        bounds.push([r.lat, r.lng]);
+      });
 
       if (bounds.length) {
         map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
@@ -636,6 +663,7 @@
         tabButtons.forEach(b => b.classList.toggle('active', b === btn));
         statusEl.textContent = 'Updating map…';
         await renderMap();
+        renderPlacedRiders();
       });
     });
 

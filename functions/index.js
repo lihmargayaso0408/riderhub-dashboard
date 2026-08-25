@@ -30,7 +30,7 @@ exports.notifyAccessRequest = onDocumentCreated("users/{userId}", async (event) 
     await transporter.sendMail({
       from: SMTP_USER,
       to: ADMIN_EMAIL,
-      subject: "Dispatch Board — New access request",
+      subject: "Rider Performance System — New access request",
       text:
         "New access request from " + who + ".\n\n" +
         "Open the dashboard and choose Options -> Access Requests to approve " +

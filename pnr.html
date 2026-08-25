@@ -77,7 +77,7 @@
         <p>Data is loaded from the shared PNR spreadsheet and split by hub.</p>
       </div>
       <div class="page-actions">
-        <a class="back-link" href="index.html">← Back to Dispatch Board</a>
+        <a class="back-link" href="index.html">← Back to Rider Performance System</a>
         <div class="status-box" id="sheetStatus">Loading sheet…</div>
       </div>
     </div>
@@ -113,7 +113,7 @@
   </div>
 
   <script type="module">
-    const __perms = await window.Auth.guard();
+    const __perms = await window.Auth.guard('pnr');
     if (!__perms) throw new Error('redirect');
     const PNR_SHEET_ID = '1aGJXuO3tz5oLJyL6piEljz4A6cg6l0cnKvmtIpLkqMI';
     const PNR_SHEET_NAME = 'PNR';

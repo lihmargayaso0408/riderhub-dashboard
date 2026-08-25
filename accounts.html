@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Manage Accounts — Dispatch Board</title>
+  <title>Manage Accounts — Rider Performance System</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
@@ -52,10 +52,10 @@
     <div class="page-head">
       <div>
         <h1>Manage Accounts</h1>
-        <p>Edit hub &amp; action access for signed-in accounts, or remove their access.</p>
+        <p>Edit hub, action, and page access for signed-in accounts, or remove their access.</p>
       </div>
       <div class="page-actions">
-        <a class="back-link" href="index.html">← Back to Dispatch Board</a>
+        <a class="back-link" href="index.html">← Back to Rider Performance System</a>
         <div class="status-box" id="statusBox">Loading accounts…</div>
       </div>
     </div>
@@ -71,7 +71,7 @@
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    const __perms = await window.Auth.guard();
+    const __perms = await window.Auth.guard('accounts');
     if (!__perms) throw new Error('redirect');
     if (__perms.role !== 'admin') {
       window.location.href = 'index.html';
@@ -80,6 +80,7 @@
     const Auth = window.Auth;
     const ALL_HUBS = Auth.ALL_HUBS;
     const ALL_ACTIONS = Auth.ALL_ACTIONS;
+    const ALL_PAGES = Auth.ALL_PAGES;
 
     if (typeof window.applySavedTheme === 'function') window.applySavedTheme();
 
@@ -115,6 +116,9 @@
       const actions = ALL_ACTIONS.map(a =>
         `<label class="access-check"><input type="checkbox" data-type="action" value="${escapeHtml(a)}" ${ (acc.actions && acc.actions[a]) ? 'checked' : '' }> ${escapeHtml(a)}</label>`
       ).join('');
+      const pages = ALL_PAGES.map(p =>
+        `<label class="access-check"><input type="checkbox" data-type="page" value="${escapeHtml(p.key)}" ${ (acc.pages && acc.pages.includes(p.key)) ? 'checked' : '' }> ${escapeHtml(p.key)}</label>`
+      ).join('');
       const isSelf = acc.uid === currentUid;
       const isAdminAcct = acc.role === 'admin';
       return `<div class="account-card" data-uid="${escapeHtml(acc.uid)}">
@@ -130,6 +134,7 @@
         <div class="account-opts">
           <div class="account-group"><div class="account-group-title">Hubs</div>${hubs}</div>
           <div class="account-group"><div class="account-group-title">Actions</div>${actions}</div>
+          <div class="account-group"><div class="account-group-title">Pages</div>${pages}</div>
         </div>
         <div class="account-actions">
           <button class="btn-primary" data-act="save" type="button">Save changes</button>
@@ -158,6 +163,7 @@
             const box = card.querySelector(`input[data-type="action"][value="${a}"]`);
             actions[a] = !!box && box.checked;
           });
+          const pages = Array.from(card.querySelectorAll('input[data-type="page"]:checked')).map(i => i.value);
           if (hubs.length === 0) {
             msgEl.textContent = 'Select at least one hub.';
             msgEl.className = 'account-msg err';
@@ -166,7 +172,7 @@
           msgEl.textContent = 'Saving…';
           msgEl.className = 'account-msg';
           try {
-            await Auth.setPerms(uid, { hubs, actions, status: 'approved' });
+            await Auth.setPerms(uid, { hubs, actions, status: 'approved', pages });
             msgEl.textContent = 'Saved.';
             msgEl.className = 'account-msg ok';
             showToast('Access updated.');

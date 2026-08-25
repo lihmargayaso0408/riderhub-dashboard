@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sign in — Dispatch Board</title>
+  <title>Sign in — Rider Performance System</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
@@ -38,7 +38,7 @@
 <body>
   <div class="login-card">
     <p class="brand-eyebrow">LG'S FLEET VIEW</p>
-    <h1>Dispatch Board</h1>
+    <h1>Rider Performance System</h1>
     <p class="sub">Sign in with your account. New here? Request access and the owner will be notified.</p>
 
     <div class="login-field">
@@ -85,11 +85,7 @@
       try {
         const profile = await Auth.getProfile(user.uid);
         if (profile && profile.status === 'approved') {
-          if (!Auth.ADMIN_EMAILS.includes((user.email || '').toLowerCase())) {
-            location.href = 'index.html';
-          } else {
-            location.href = 'index.html';
-          }
+          location.href = 'index.html';
         }
       } catch (e) { /* ignore */ }
     });
@@ -101,7 +97,6 @@
       signInBtn.disabled = true; requestBtn.disabled = true; setMsg('Signing in…', 'info');
       try {
         await Auth.login(email, password);
-        // guard() will redirect based on status.
         const profile = await Auth.guard();
         if (profile) location.href = 'index.html';
       } catch (e) {

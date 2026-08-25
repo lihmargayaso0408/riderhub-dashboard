@@ -1,6 +1,6 @@
 {
   "name": "dispatch-functions",
-  "description": "Cloud Functions for the Dispatch Board (access-request email notifications)",
+  "description": "Cloud Functions for the Rider Performance System (access-request email notifications)",
   "private": true,
   "engines": {
     "node": "18"

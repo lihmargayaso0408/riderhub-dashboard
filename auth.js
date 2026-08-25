@@ -16,6 +16,13 @@ const db = getFirestore(app);
 
 const ALL_HUBS = ['Buguias', 'MB Atok', 'Bauko'];
 const ALL_ACTIONS = ['upload', 'delete', 'download'];
+const ALL_PAGES = [
+  { key: 'riders', file: 'riders-agency.html' },
+  { key: 'loss', file: 'loss-report.html' },
+  { key: 'pnr', file: 'pnr.html' },
+  { key: 'map', file: 'area-map.html' },
+  { key: 'accounts', file: 'accounts.html' }
+];
 
 // Owner email(s). Anyone signing in with one of these is auto-promoted to admin.
 // The admin can approve requests and set each user's hubs + actions.
@@ -23,6 +30,7 @@ const ADMIN_EMAILS = ['lihmar.gayaso@spxexpress.com']; // TODO: add your email(s
 
 function emptyActions() { return Object.fromEntries(ALL_ACTIONS.map(a => [a, false])); }
 function fullActions() { return Object.fromEntries(ALL_ACTIONS.map(a => [a, true])); }
+function fullPages() { return ALL_PAGES.map(p => p.key); }
 
 async function ensureProfile(user) {
   const ref = doc(db, 'users', user.uid);
@@ -38,6 +46,7 @@ async function ensureProfile(user) {
       role: isAdmin ? 'admin' : 'user',
       hubs: isAdmin ? ALL_HUBS.slice() : [],
       actions: isAdmin ? fullActions() : emptyActions(),
+      pages: isAdmin ? fullPages() : fullPages(),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     };
@@ -49,7 +58,7 @@ async function ensureProfile(user) {
   if (isAdmin && d.role !== 'admin') {
     const patch = {
       role: 'admin', status: 'approved',
-      hubs: ALL_HUBS.slice(), actions: fullActions(),
+      hubs: ALL_HUBS.slice(), actions: fullActions(), pages: fullPages(),
       updatedAt: serverTimestamp()
     };
     await updateDoc(ref, patch);
@@ -59,7 +68,7 @@ async function ensureProfile(user) {
 }
 
 const Auth = {
-  auth, db, ALL_HUBS, ALL_ACTIONS, ADMIN_EMAILS,
+  auth, db, ALL_HUBS, ALL_ACTIONS, ALL_PAGES, ADMIN_EMAILS,
 
   onAuthChange(cb) { return onAuthStateChanged(auth, cb); },
   currentUser() { return auth.currentUser; },
@@ -92,8 +101,9 @@ const Auth = {
   },
 
   // Call at the very start of every protected page.
+  // Pass a pageKey to enforce page-level access control.
   // Returns the approved profile, or redirects away (returns null).
-  async guard() {
+  async guard(pageKey) {
     const user = await Auth.whenReady();
     if (!user) { window.location.href = 'login.html'; return null; }
     let profile = await ensureProfile(user);
@@ -101,8 +111,13 @@ const Auth = {
     if (profile.status === 'rejected') { window.location.href = 'login.html?state=rejected'; return null; }
     if (ADMIN_EMAILS.includes((user.email || '').toLowerCase())) {
       profile = Object.assign({}, profile, {
-        role: 'admin', hubs: ALL_HUBS.slice(), actions: fullActions()
+        role: 'admin', hubs: ALL_HUBS.slice(), actions: fullActions(), pages: fullPages()
       });
+    }
+    const allowedPages = profile.pages === undefined || profile.pages === null ? fullPages() : profile.pages;
+    if (pageKey && allowedPages.indexOf(pageKey) === -1) {
+      window.location.href = 'login.html';
+      return null;
     }
     return profile;
   },
@@ -112,10 +127,10 @@ const Auth = {
     const s = await getDocs(q);
     return s.docs.map(d => ({ uid: d.id, id: d.id, ...d.data() }));
   },
-  async setPerms(uid, { hubs, actions, status }) {
-    await updateDoc(doc(db, 'users', uid), {
-      hubs, actions, status, updatedAt: serverTimestamp()
-    });
+  async setPerms(uid, { hubs, actions, status, pages }) {
+    const data = { hubs, actions, status, updatedAt: serverTimestamp() };
+    if (pages !== undefined) data.pages = pages;
+    await updateDoc(doc(db, 'users', uid), data);
   },
   async reject(uid) {
     await updateDoc(doc(db, 'users', uid), { status: 'rejected', updatedAt: serverTimestamp() });

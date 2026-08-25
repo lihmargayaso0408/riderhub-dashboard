@@ -77,12 +77,12 @@
       + '<button class="drawer-close" id="optDrawerClose" type="button" aria-label="Close options">×</button></div>';
 
     var drawerBody = '<div class="drawer-body">'
-      + item('optHomeBtn', 'Dispatch Board', svgHome)
+      + item('optHomeBtn', 'Rider Performance System', svgHome)
       + item('optRidersBtn', 'Riders &amp; Agency per hub', svgRiders)
       + item('optLossBtn', 'Loss Report per hub', svgLoss)
       + item('optPnrBtn', 'PNR of Riders', svgPnr)
        + item('optAreaBtn', 'Area Map', svgMap)
-       + (isAdmin() ? item('optAccountsBtn', 'Manage Accounts', svgAccounts) : '')
+       + item('optAccountsBtn', 'Manage Accounts', svgAccounts)
        + item('optLogoutBtn', 'Log out', svgLogout)
       + '<button class="drawer-item drawer-item-theme" id="optThemeToggle" type="button">'
       + icon(svgTheme) + '<span class="drawer-label">Dark mode</span>'
@@ -242,6 +242,30 @@
     positionWheel();
     wireDrag();
     wireEvents();
+
+    (async function applyAccess(){
+      try {
+        var u = window.Auth && window.Auth.currentUser && window.Auth.currentUser();
+        if (u) {
+          var profile = await window.Auth.getProfile(u.uid);
+          if (profile && profile.pages && profile.pages.length) {
+            var pageMap = {
+              'optRidersBtn': 'riders',
+              'optLossBtn': 'loss',
+              'optPnrBtn': 'pnr',
+              'optAreaBtn': 'map',
+              'optAccountsBtn': 'accounts'
+            };
+            Object.keys(pageMap).forEach(function(id){
+              var el = document.getElementById(id);
+              if (el && profile.pages.indexOf(pageMap[id]) === -1) {
+                el.style.display = 'none';
+              }
+            });
+          }
+        }
+      } catch(e) {}
+    })();
   }
 
   if (document.readyState === 'loading') {

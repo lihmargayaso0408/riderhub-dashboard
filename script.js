@@ -296,6 +296,7 @@
     hubIndex: {Bauko:[],'MB Atok':[],Buguias:[]},
     currentHub: 'All',
     currentDate: null,
+    frequency: 'weekly',
     rows: [],
     summaries: {Bauko:[],'MB Atok':[],Buguias:[]},
     sortKey: 'deliverySuccessRate',
@@ -389,7 +390,28 @@ function fmtWeekLabel(d){
     return (state.hubIndex[state.currentHub]||[]).slice().sort();
   }
 
-  function latestDate(list){ return list.length ? list[list.length-1] : null; }
+    function latestDate(list){ return list.length ? list[list.length-1] : null; }
+
+    function resolveSnapshotDate(hub, selDate){
+      if(!selDate) return null;
+      const hd = state.hubIndex[hub] || [];
+      if(!hd.length) return null;
+      if(state.frequency === 'daily'){
+        return hd.includes(selDate) ? selDate : latestDate(hd);
+      }
+      if(state.frequency === 'monthly'){
+        const sel = new Date(selDate + 'T00:00:00');
+        const inMonth = hd.filter(d => {
+          const m = new Date(d + 'T00:00:00');
+          return m.getFullYear() === sel.getFullYear() && m.getMonth() === sel.getMonth();
+        });
+        return inMonth.length ? latestDate(inMonth) : latestDate(hd);
+      }
+      // weekly
+      const wk = toISODate(startOfWeek(selDate));
+      const inWeek = hd.filter(d => toISODate(startOfWeek(d)) === wk);
+      return inWeek.length ? latestDate(inWeek) : latestDate(hd);
+    }
 
   function applyAccessControl(perms){
     // Hide route stops the user isn't allowed to view.
@@ -407,6 +429,21 @@ function fmtWeekLabel(d){
     if(!actions.upload){ const b=$('#openUploadBtn'); if(b) b.style.display='none'; }
     if(!actions.delete){ const b=$('#deleteDateMenuBtn'); if(b) b.style.display='none'; }
     if(!actions.download){ const b=$('#downloadRecordsBtn'); if(b) b.style.display='none'; }
+
+    // Hide drawer page buttons the user isn't allowed to access.
+    const pages = perms.pages || Auth.ALL_PAGES.map(p=>p.key);
+    const pageBtnMap = {
+      'riders': '#openRidersPageBtn',
+      'loss': '#openLossReportBtn',
+      'pnr': '#openPnrPageBtn',
+      'map': '#openAreaMapBtn',
+      'accounts': '#openAccountsBtn'
+    };
+    Object.keys(pageBtnMap).forEach(function(key){
+      const sel = pageBtnMap[key];
+      const b = typeof $ === 'function' ? $(sel) : document.querySelector(sel);
+      if(b) b.style.display = pages.indexOf(key) === -1 ? 'none' : '';
+    });
 
     // Admin-only: Access Requests + Manage Accounts entries.
     if(perms.role==='admin'){
@@ -433,6 +470,7 @@ function fmtWeekLabel(d){
       listEl.innerHTML = pending.map(p=>{
         const hubs = Auth.ALL_HUBS.map(h=>`<label class="access-check"><input type="checkbox" data-uid="${p.uid}" data-type="hub" value="${h}"> ${h}</label>`).join('');
         const acts = Auth.ALL_ACTIONS.map(a=>`<label class="access-check"><input type="checkbox" data-uid="${p.uid}" data-type="action" value="${a}"> ${a}</label>`).join('');
+        const pages = Auth.ALL_PAGES.map(pg=>`<label class="access-check"><input type="checkbox" data-uid="${p.uid}" data-type="page" value="${pg.key}"> ${pg.key}</label>`).join('');
         const created = p.createdAt && p.createdAt.toDate ? p.createdAt.toDate().toLocaleString() : '';
         return `<div class="access-row" data-uid="${p.uid}">
           <div class="access-head">
@@ -442,6 +480,7 @@ function fmtWeekLabel(d){
           <div class="access-opts">
             <div class="access-group"><div class="access-group-title">Hubs</div>${hubs}</div>
             <div class="access-group"><div class="access-group-title">Actions</div>${acts}</div>
+            <div class="access-group"><div class="access-group-title">Pages</div>${pages}</div>
           </div>
           <div class="access-actions">
             <button class="btn-primary" data-act="approve" data-uid="${p.uid}">Approve</button>
@@ -467,8 +506,9 @@ function fmtWeekLabel(d){
             const box = row.querySelector(`input[data-type="action"][value="${a}"]`);
             actions[a] = !!box && box.checked;
           });
+          const pages = Array.from(row.querySelectorAll('input[data-type="page"]:checked')).map(i=>i.value);
           if(hubs.length===0){ msgEl.textContent='Select at least one hub.'; msgEl.className='modal-msg err'; return; }
-          await Auth.setPerms(uid, { hubs, actions, status:'approved' });
+          await Auth.setPerms(uid, { hubs, actions, status:'approved', pages });
           renderAccessList();
           showToast('Access approved.');
         });
@@ -504,49 +544,131 @@ function fmtWeekLabel(d){
     overlay.addEventListener('click', e=>{ if(e.target.id==='accessOverlay') overlay.classList.remove('show'); });
   }
 
-  async function refreshView(){
-    const dates = allDatesForCurrentHub();
-    const dateSelect = $('#dateSelect');
-    dateSelect.innerHTML = '';
-    if(dates.length===0){
-      dateSelect.style.display='none';
+  let calendarYear = null;
+  let calendarMonth = null;
+
+  function syncDateSelect(){
+    const btn = $('#datePickerBtn');
+    const label = $('#datePickerLabel');
+    const wrap = $('#datePickerWrap');
+    const base = allDatesForCurrentHub();
+    if(base.length === 0){
+      wrap.style.display = 'none';
+      state.currentDate = null;
     } else {
-      dateSelect.style.display='';
-      dates.slice().reverse().forEach(d=>{
-        const opt = document.createElement('option');
-        opt.value = d; opt.textContent = fmtWeekLabel(d);
-        dateSelect.appendChild(opt);
+      wrap.style.display = '';
+      if(!state.currentDate){ state.currentDate = latestDate(base); }
+      label.textContent = state.currentDate ? fmtDate(state.currentDate) : 'Select date';
+      if(state.currentDate){
+        const dt = new Date(state.currentDate+'T00:00:00');
+        calendarYear = dt.getFullYear();
+        calendarMonth = dt.getMonth();
+      }
+    }
+    return base.length > 0;
+  }
+
+  function renderCalendar(){
+    const grid = $('#datePickerGrid');
+    const monthLabel = $('#datePickerMonthLabel');
+    if(!grid || calendarYear === null || calendarMonth === null) return;
+
+    monthLabel.textContent = new Date(calendarYear, calendarMonth).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+
+    const firstDay = new Date(calendarYear, calendarMonth, 1).getDay();
+    const daysInMonth = new Date(calendarYear, calendarMonth+1, 0).getDate();
+    const today = new Date();
+    const todayStr = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+    const selectedStr = state.currentDate || '';
+
+    let html = '';
+    for(let i=0;i<firstDay;i++) html += '<button type="button" class="date-picker-cell muted" disabled></button>';
+    for(let d=1;d<=daysInMonth;d++){
+      const dateStr = calendarYear+'-'+String(calendarMonth+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+      const isToday = dateStr === todayStr;
+      const isSelected = dateStr === selectedStr;
+      let cls = 'date-picker-cell';
+      if(isToday) cls += ' today';
+      if(isSelected) cls += ' selected';
+      html += `<button type="button" class="${cls}" data-date="${dateStr}">${d}</button>`;
+    }
+    grid.innerHTML = html;
+
+    grid.querySelectorAll('.date-picker-cell:not(.muted)').forEach(cell=>{
+      cell.addEventListener('click', async ()=>{
+        const date = cell.dataset.date;
+        state.currentDate = date;
+        $('#datePickerLabel').textContent = fmtDate(date);
+        closeCalendar();
+        await refreshView();
       });
-      if(!state.currentDate || !dates.includes(state.currentDate)){
-        state.currentDate = latestDate(dates);
-      }
-      dateSelect.value = state.currentDate;
-    }
+    });
+  }
 
-    $('#viewTitle').textContent = state.currentHub==='All' ? 'All Hubs' : state.currentHub;
-    $('#viewSub').textContent = state.currentDate ? `Snapshot for ${fmtWeekLabel(state.currentDate)}` : 'Snapshot for —';
-
-    if(dates.length===0){
-      renderEmpty();
-      updateLastUpdatedNote();
-      return;
-    }
-
-    let rows = [];
-    if(state.currentHub==='All'){
-      for(const hub of allowedHubs()){
-        const hd = state.hubIndex[hub]||[];
-        const useDate = hd.includes(state.currentDate) ? state.currentDate : latestDate(hd);
-        if(useDate){
-          const snap = await loadSnapshot(hub, useDate);
-          if(snap) rows = rows.concat(snap.rows.map(r=>Object.assign({},r,{hub, snapDate:useDate})));
-        }
-      }
+  function openCalendar(){
+    const wrap = $('#datePickerWrap');
+    const btn = $('#datePickerBtn');
+    if(!wrap) return;
+    wrap.classList.add('open');
+    btn.setAttribute('aria-expanded','true');
+    if(state.currentDate){
+      const dt = new Date(state.currentDate+'T00:00:00');
+      calendarYear = dt.getFullYear();
+      calendarMonth = dt.getMonth();
     } else {
-      const snap = await loadSnapshot(state.currentHub, state.currentDate);
-      if(snap) rows = snap.rows.map(r=>Object.assign({},r,{hub:state.currentHub, snapDate:state.currentDate}));
+      const now = new Date();
+      calendarYear = now.getFullYear();
+      calendarMonth = now.getMonth();
     }
-state.rows = rows;
+    renderCalendar();
+  }
+
+  function closeCalendar(){
+    const wrap = $('#datePickerWrap');
+    const btn = $('#datePickerBtn');
+    if(wrap) wrap.classList.remove('open');
+    if(btn) btn.setAttribute('aria-expanded','false');
+  }
+
+  function toggleCalendar(){
+    const wrap = $('#datePickerWrap');
+    if(wrap && wrap.classList.contains('open')) closeCalendar();
+    else openCalendar();
+  }
+
+   async function refreshView(){
+      const hasDates = syncDateSelect();
+
+      $('#viewTitle').textContent = state.currentHub==='All' ? 'All Hubs' : state.currentHub;
+      $('#viewSub').textContent = state.currentDate ? `Snapshot for ${fmtDate(state.currentDate)}` : 'Snapshot for —';
+
+      if(!hasDates){
+        renderEmpty();
+        updateLastUpdatedNote();
+        return;
+      }
+
+     let rows = [];
+     if(state.currentHub==='All'){
+       for(const hub of allowedHubs()){
+         const hd = state.hubIndex[hub]||[];
+         const snapDate = resolveSnapshotDate(hub, state.currentDate);
+         const useDate = snapDate && hd.includes(snapDate) ? snapDate : latestDate(hd);
+         if(useDate){
+           const snap = await loadSnapshot(hub, useDate);
+           if(snap) rows = rows.concat(snap.rows.map(r=>Object.assign({},r,{hub, snapDate:useDate})));
+         }
+       }
+     } else {
+       const hd = state.hubIndex[state.currentHub]||[];
+       const snapDate = resolveSnapshotDate(state.currentHub, state.currentDate);
+       const useDate = snapDate && hd.includes(snapDate) ? snapDate : latestDate(hd);
+       if(useDate){
+         const snap = await loadSnapshot(state.currentHub, useDate);
+         if(snap) rows = snap.rows.map(r=>Object.assign({},r,{hub:state.currentHub, snapDate:useDate}));
+       }
+     }
+     state.rows = rows;
 
     // Populate the Area from the Riders & Agency sheet by matching rider name
     if(areaLookup && areaLookup.size){
@@ -679,11 +801,19 @@ await renderTrend();
     // Clicking the "Not Solved PNR" panel opens the PNR of Riders page.
     const nsPanel = $('#notSolvedPanel');
     if(nsPanel){
-      const goToPnr = ()=> window.location.href = 'pnr.html';
-      nsPanel.addEventListener('click', goToPnr);
-      nsPanel.addEventListener('keydown', e=>{
-        if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); goToPnr(); }
-      });
+      const hasPnrAccess = (state.perms && state.perms.pages && state.perms.pages.indexOf('pnr') !== -1);
+      if(hasPnrAccess){
+        const goToPnr = ()=> window.location.href = 'pnr.html';
+        nsPanel.addEventListener('click', goToPnr);
+        nsPanel.addEventListener('keydown', e=>{
+          if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); goToPnr(); }
+        });
+      } else {
+        nsPanel.classList.remove('clickable-panel');
+        nsPanel.removeAttribute('role');
+        nsPanel.removeAttribute('tabindex');
+        nsPanel.title = 'No access to PNR of Riders';
+      }
     }
   }
 
@@ -781,9 +911,13 @@ await renderTrend();
   }
 
 async function renderNotSolved(){
-    // Load not-solved PNR from the same Google Sheet used by the "PNR of Riders" page.
     const wrap = $('#notSolvedWrap');
     if(!wrap) return;
+    const hasPnrAccess = (state.perms && state.perms.pages && state.perms.pages.indexOf('pnr') !== -1);
+    if(!hasPnrAccess){
+      wrap.innerHTML = '<div class="trend-disabled">NO ACCESS</div>';
+      return;
+    }
     wrap.innerHTML = '<div class="trend-disabled">Loading PNR data…</div>';
     try{
       const url = `https://docs.google.com/spreadsheets/d/${PNR_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(PNR_SHEET_NAME)}`;
@@ -855,7 +989,7 @@ const entries = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
     {key:'vehicleType', label:'Vehicle', type:'text'},
     {key:'area', label:'Area', type:'text'},
     {key:'driverGroup', label:'Group', type:'text'},
-    {key:'attendDays', label:'Days', type:'num'},
+    {key:'attendDays', label:'Days', type:'num', hideOnDaily:true},
     {key:'avgParcelsPerDay', label:'Parcels/Day', type:'num1'},
     {key:'parcelsAssigned', label:'Parcels Assigned', type:'num'},
     {key:'parcelsOnHold', label:'On-hold', type:'num'},
@@ -879,10 +1013,19 @@ vSel.value = state.filterVehicle; gSel.value = state.filterGroup;
     $('#searchInput').addEventListener('input', e=>{ state.search=e.target.value; renderTable(); });
     vSel.addEventListener('change', e=>{ state.filterVehicle=e.target.value; renderTable(); });
 gSel.addEventListener('change', e=>{ state.filterGroup=e.target.value; renderTable(); });
-    $('#hideInactiveToggle').addEventListener('change', e=>{ state.hideInactive=e.target.checked; renderTable(); });
+     $('#hideInactiveToggle').addEventListener('change', e=>{ state.hideInactive=e.target.checked; renderTable(); });
 
+    renderThead();
+  }
+
+  function visibleColumns(){
+    return COLUMNS.filter(c => !c.showOnlyAll || state.currentHub === 'All')
+      .filter(c => !(c.hideOnDaily && state.frequency === 'daily'));
+  }
+
+  function renderThead(){
     const thead = $('#theadRow');
-    thead.innerHTML = COLUMNS.filter(c=>!c.showOnlyAll || state.currentHub==='All').map(c=>
+    thead.innerHTML = visibleColumns().map(c=>
       `<th data-key="${c.key}">${c.label}<span class="arrow">${state.sortKey===c.key ? (state.sortDir==='asc'?'▲':'▼') : ''}</span></th>`
     ).join('');
     $$('#theadRow th').forEach(th=>{
@@ -925,7 +1068,7 @@ if(state.filterGroup) rows = rows.filter(r=>r.driverGroup===state.filterGroup);
       return 0;
     });
 
-const cols = COLUMNS.filter(c=>!c.showOnlyAll || state.currentHub==='All');
+    const cols = visibleColumns();
     const tbody = $('#tbody');
     tbody.innerHTML = rows.map(r=>{
       return '<tr>' + cols.map(c=>{
@@ -961,15 +1104,9 @@ if(c.type==='num1') return `<td class="num">${(r[c.key]||0).toFixed(1)}</td>`;
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
-  }
+   }
 
-  function formatWeekRange(startDate){
-    const end = new Date(startDate);
-    end.setDate(end.getDate() + 6);
-    return `${fmtDate(toISODate(startDate))} – ${fmtDate(toISODate(end))}`;
-  }
-
-  function renderWeekPicker(){
+   function renderWeekPicker(){
     const input = $('#dateInput');
     const monthLabel = $('#weekPickerMonthLabel');
     const grid = $('#weekPickerGrid');
@@ -996,14 +1133,14 @@ cells.forEach((day, index)=>{
       cell.className = 'week-picker-cell';
       if(!day){ cell.classList.add('muted'); cell.disabled = true; grid.appendChild(cell); return; }
       const date = new Date(year, month, day);
-      const monday = startOfWeek(date); // week always starts on Monday
-      const isMonday = date.getDay() === 1;
+      const todayISO = toISODate(new Date());
+      const isToday = toISODate(date) === todayISO;
       const isSelectedDate = selectedDate && selectedDate.getFullYear() === date.getFullYear() && selectedDate.getMonth() === date.getMonth() && selectedDate.getDate() === date.getDate();
       if(isSelectedDate) cell.classList.add('selected');
-      if(isMonday) cell.classList.add('monday');
+      if(isToday) cell.classList.add('today');
       cell.textContent = day;
       cell.addEventListener('click', ()=>{
-        input.value = toISODate(monday);
+        input.value = toISODate(date);
         state.weekPickerSelectedDate = toISODate(date);
         state.weekPickerMonth = new Date(date.getFullYear(), date.getMonth(), 1);
         renderWeekPicker();
@@ -1011,7 +1148,7 @@ cells.forEach((day, index)=>{
       grid.appendChild(cell);
     });
 
-    selectionText.textContent = input.value ? `Selected week: ${formatWeekRange(new Date(input.value + 'T00:00:00'))}` : 'Selected week: —';
+    selectionText.textContent = input.value ? `Selected date: ${fmtDate(input.value)}` : 'Selected date: —';
   }
 
   function openModal(){
@@ -1020,11 +1157,10 @@ cells.forEach((day, index)=>{
     $('#dropText').innerHTML = '<b>Click to choose</b> or drag a .csv file here';
     pendingFile = null; pendingParsedRows = null;
     $('#confirmUpload').disabled = true;
-    const today = new Date();
-    const monday = startOfWeek(today);
-    if(!$('#dateInput').value){ $('#dateInput').value = toISODate(monday); }
-    state.weekPickerSelectedDate = toISODate(today);
-    state.weekPickerMonth = new Date(monday.getFullYear(), monday.getMonth(), 1);
+     const today = new Date();
+     if(!$('#dateInput').value){ $('#dateInput').value = toISODate(today); }
+     state.weekPickerSelectedDate = toISODate(today);
+     state.weekPickerMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     renderWeekPicker();
     if(state.currentHub==='Bauko' || state.currentHub==='MB Atok' || state.currentHub==='Buguias') $('#hubSelect').value = state.currentHub;
   }
@@ -1040,10 +1176,9 @@ cells.forEach((day, index)=>{
     const m = file.name.match(/(\d{4}-\d{2}-\d{2})/);
     if(m) {
       const picked = new Date(m[1] + 'T00:00:00');
-      const monday = startOfWeek(picked);
-      $('#dateInput').value = toISODate(monday);
+      $('#dateInput').value = toISODate(picked);
       state.weekPickerSelectedDate = toISODate(picked);
-      state.weekPickerMonth = new Date(monday.getFullYear(), monday.getMonth(), 1);
+      state.weekPickerMonth = new Date(picked.getFullYear(), picked.getMonth(), 1);
       renderWeekPicker();
     }
 
@@ -1084,7 +1219,7 @@ cells.forEach((day, index)=>{
     if(!pendingParsedRows) return;
     const hub = $('#hubSelect').value;
     const date = $('#dateInput').value;
-    if(!date){ $('#modalMsg').textContent='Pick a week start date.'; $('#modalMsg').className='modal-msg err'; return; }
+     if(!date){ $('#modalMsg').textContent='Pick a date.'; $('#modalMsg').className='modal-msg err'; return; }
 
     const btn = $('#confirmUpload');
     btn.disabled = true;
@@ -1109,7 +1244,7 @@ cells.forEach((day, index)=>{
       await saveSummaryArr(hub, summaryArr);
 
       closeModal();
-      showToast(`Added <b>${hub}</b> — week of ${fmtDate(date)} (${pendingParsedRows.length} riders)`);
+       showToast(`Added <b>${hub}</b> — ${fmtDate(date)} (${pendingParsedRows.length} riders)`);
 
       setActiveTab(hub);
       state.currentDate = date;
@@ -1131,47 +1266,69 @@ cells.forEach((day, index)=>{
     t._timer = setTimeout(()=>t.classList.remove('show'), 3200);
   }
 
-  async function deleteSelectedDate(){
-    if(!state.currentDate){
-      showToast('Select a date to delete.');
-      return;
-    }
+   async function deleteSelectedDate(){
+     if(!state.currentDate){
+       showToast('Select a date to delete.');
+       return;
+     }
 
-    const targetDate = state.currentDate;
-    const hubsToDelete = state.currentHub === 'All'
-      ? HUBS.filter(hub => (state.hubIndex[hub]||[]).includes(targetDate))
-      : [state.currentHub];
-
-    if(hubsToDelete.length === 0){
-      showToast('That date is not stored for the current view.');
-      return;
-    }
-
-    const summaryText = hubsToDelete.length > 1
-      ? `Delete the manifest for ${fmtDate(targetDate)} from ${hubsToDelete.join(' and ')}?`
-      : `Delete the manifest for ${fmtDate(targetDate)} from ${hubsToDelete[0]}?`;
-
-    if(!confirm(`${summaryText} This cannot be undone.`)) return;
-
-    try{
-      for(const hub of hubsToDelete){
-        await storage.delete(`snapshot:${hub}:${targetDate}`, false);
-
-        const nextSummary = (state.summaries[hub]||[]).filter(item => item.date !== targetDate);
-        state.summaries[hub] = nextSummary;
-        await saveSummaryArr(hub, nextSummary);
-
-        state.hubIndex[hub] = (state.hubIndex[hub]||[]).filter(date => date !== targetDate);
+      // Resolve the selected date to the actual stored snapshot date(s)
+      let targetDates = [];
+      if(state.frequency === 'daily'){
+        targetDates = [state.currentDate];
+      } else if(state.frequency === 'monthly'){
+        const sel = new Date(state.currentDate + 'T00:00:00');
+        targetDates = allDatesForCurrentHub().filter(d => {
+          const m = new Date(d + 'T00:00:00');
+          return m.getFullYear() === sel.getFullYear() && m.getMonth() === sel.getMonth();
+        });
+      } else {
+        const wk = toISODate(startOfWeek(state.currentDate));
+        targetDates = allDatesForCurrentHub().filter(d => toISODate(startOfWeek(d)) === wk);
       }
 
-      await saveIndex(state.hubIndex);
-      state.currentDate = null;
-      await refreshView();
-      showToast('Selected manifest date removed.');
-    }catch(err){
-      showToast('Could not delete that manifest date.');
-    }
-  }
+     const deleteSet = new Set(targetDates);
+     const hubsToDelete = (state.currentHub === 'All' ? HUBS : [state.currentHub]).filter(hub => {
+       const hd = state.hubIndex[hub] || [];
+       return hd.some(d => deleteSet.has(d));
+     });
+
+     if(hubsToDelete.length === 0){
+       showToast('That date is not stored for the current view.');
+       return;
+     }
+
+     const displayDate = fmtDate(state.currentDate);
+     const summaryText = hubsToDelete.length > 1
+       ? `Delete the manifest for ${displayDate} from ${hubsToDelete.join(' and ')}?`
+       : `Delete the manifest for ${displayDate} from ${hubsToDelete[0]}?`;
+
+     if(!confirm(`${summaryText} This cannot be undone.`)) return;
+
+     try{
+       for(const hub of hubsToDelete){
+         const hd = state.hubIndex[hub] || [];
+         for(const d of targetDates){
+           if(hd.includes(d)){
+             await storage.delete(`snapshot:${hub}:${d}`, false);
+
+             const nextSummary = (state.summaries[hub]||[]).filter(item => item.date !== d);
+             state.summaries[hub] = nextSummary;
+             await saveSummaryArr(hub, nextSummary);
+
+             state.hubIndex[hub] = (state.hubIndex[hub]||[]).filter(date => date !== d);
+           }
+         }
+       }
+
+       await saveIndex(state.hubIndex);
+       state.currentDate = null;
+       await refreshView();
+       showToast('Selected manifest date removed.');
+     }catch(err){
+       showToast('Could not delete that manifest date.');
+     }
+   }
 
   async function resetAll(){
     if(!confirm('Clear all stored manifests for both hubs? This cannot be undone.')) return;
@@ -1507,10 +1664,37 @@ function closeSettingsMenu(){
       });
     });
 
-    $('#dateSelect').addEventListener('change', async e=>{
-      state.currentDate = e.target.value;
-      await refreshView();
-    });
+     $('#datePickerBtn').addEventListener('click', e=>{
+       e.stopPropagation();
+       toggleCalendar();
+     });
+
+     $('#datePickerPrev').addEventListener('click', e=>{
+       e.stopPropagation();
+       if(calendarMonth === 0){ calendarMonth = 11; calendarYear--; }
+       else calendarMonth--;
+       renderCalendar();
+     });
+
+     $('#datePickerNext').addEventListener('click', e=>{
+       e.stopPropagation();
+       if(calendarMonth === 11){ calendarMonth = 0; calendarYear++; }
+       else calendarMonth++;
+       renderCalendar();
+     });
+
+     document.addEventListener('click', e=>{
+       const wrap = $('#datePickerWrap');
+       if(wrap && !wrap.contains(e.target)) closeCalendar();
+     });
+
+      $('#freqToggle').addEventListener('click', async e=>{
+        const btn = e.target.closest('.freq-btn');
+        if(!btn || btn.classList.contains('active')) return;
+        state.frequency = btn.dataset.freq;
+        $$('.freq-btn').forEach(b=>b.classList.toggle('active', b===btn));
+        await refreshView();
+      });
 
 function openSettingsMenu(){
       const drawer = $('#settingsDrawer');
