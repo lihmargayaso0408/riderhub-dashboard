@@ -245,24 +245,31 @@
 
     (async function applyAccess(){
       try {
-        var u = window.Auth && window.Auth.currentUser && window.Auth.currentUser();
-        if (u) {
-          var profile = await window.Auth.getProfile(u.uid);
-          if (profile && profile.pages && profile.pages.length) {
-            var pageMap = {
-              'optRidersBtn': 'riders',
-              'optLossBtn': 'loss',
-              'optPnrBtn': 'pnr',
-              'optAreaBtn': 'map',
-              'optAccountsBtn': 'accounts'
-            };
-            Object.keys(pageMap).forEach(function(id){
-              var el = document.getElementById(id);
-              if (el && profile.pages.indexOf(pageMap[id]) === -1) {
-                el.style.display = 'none';
-              }
-            });
-          }
+        var Auth = window.Auth;
+        if (!Auth) return;
+        // Wait for auth state to avoid race where currentUser is null on first load
+        var u = Auth.auth && Auth.auth.currentUser;
+        if (!u && Auth.whenReady) {
+          u = await Auth.whenReady();
+        }
+        if (!u) return;
+        var profile = await Auth.getProfile(u.uid);
+        // Admins get all pages; use profile.pages for everyone else
+        var isAdmin = Auth.ADMIN_EMAILS && Auth.ADMIN_EMAILS.indexOf(String(u.email || '').toLowerCase()) !== -1;
+        if (!isAdmin && profile && profile.pages && profile.pages.length) {
+          var pageMap = {
+            'optRidersBtn': 'riders',
+            'optLossBtn': 'loss',
+            'optPnrBtn': 'pnr',
+            'optAreaBtn': 'map',
+            'optAccountsBtn': 'accounts'
+          };
+          Object.keys(pageMap).forEach(function(id){
+            var el = document.getElementById(id);
+            if (el && profile.pages.indexOf(pageMap[id]) === -1) {
+              el.style.display = 'none';
+            }
+          });
         }
       } catch(e) {}
     })();
