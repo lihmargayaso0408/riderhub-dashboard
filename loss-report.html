@@ -467,6 +467,11 @@ rowsEl.innerHTML = '<tr><td colspan="13" class="muted">Loading...</td></tr>';
 
     applyHubFilter();
     loadSheet();
+
+    setInterval(async function(){
+      if(document.hidden) return;
+      await loadSheet();
+    }, 30000);
   </script>
 
   <!-- Shared Option Button / Options drawer (appears on all pages) -->

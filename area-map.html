@@ -712,6 +712,22 @@
         statusEl.innerHTML = '<span class="error">Could not load the Riders sheet. Check the link and try again.</span>';
       }
     })();
+
+    setInterval(async function(){
+      if(document.hidden) return;
+      try {
+        const n = await loadAllSheets();
+        if(n){
+          applyHubFilter();
+          await loadPerformanceData();
+          renderPlacedRiders();
+          await renderMap();
+          showToast('Area map updated automatically');
+        }
+      } catch(e) {
+        console.error('Area map auto-refresh failed:', e);
+      }
+    }, 30000);
   </script>
 
   <!-- Shared Option Button / Options drawer (appears on all pages) -->

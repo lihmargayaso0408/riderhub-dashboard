@@ -367,7 +367,62 @@ function fmtWeekLabel(d){
     await refreshView();
     wireStaticEvents();
     if(perms.role === 'admin') refreshAccessBadge();
+    startAutoRefresh();
   }
+
+  let autoRefreshUnsub = null;
+  let pollTimer = null;
+  let isRefreshing = false;
+
+  function startAutoRefresh(){
+    if(hasFirebaseStorage && window.firebaseAPI && typeof window.firebaseAPI.subscribe === 'function'){
+      autoRefreshUnsub = window.firebaseAPI.subscribe(async function(changedKeys){
+        const relevant = changedKeys.some(function(k){ return k.startsWith('snapshot:') || k === 'hubs-index' || k.startsWith('summary:'); });
+        if(!relevant || isRefreshing) return;
+        try {
+          isRefreshing = true;
+          state.hubIndex = await getIndex();
+          state.summaries.Bauko = await getSummary('Bauko');
+          state.summaries['MB Atok'] = await getSummary('MB Atok');
+          state.summaries.Buguias = await getSummary('Buguias');
+          await refreshView();
+          showToast('Dashboard updated automatically');
+        } catch(e) {
+          console.error('Auto-refresh failed:', e);
+        } finally {
+          isRefreshing = false;
+        }
+      });
+    }
+
+    pollTimer = setInterval(async function(){
+      if(document.hidden || isRefreshing) return;
+      try {
+        const newIndex = await getIndex();
+        const idxChanged = JSON.stringify(newIndex) !== JSON.stringify(state.hubIndex);
+        if(idxChanged){
+          isRefreshing = true;
+          state.hubIndex = newIndex;
+          state.summaries.Bauko = await getSummary('Bauko');
+          state.summaries['MB Atok'] = await getSummary('MB Atok');
+          state.summaries.Buguias = await getSummary('Buguias');
+          await refreshView();
+          showToast('Dashboard updated automatically');
+        }
+      } catch(e) {
+        console.error('Poll refresh failed:', e);
+      } finally {
+        isRefreshing = false;
+      }
+    }, 15000);
+  }
+
+  function stopAutoRefresh(){
+    if(autoRefreshUnsub){ autoRefreshUnsub(); autoRefreshUnsub = null; }
+    if(pollTimer){ clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  window.addEventListener('beforeunload', stopAutoRefresh);
 
   function setActiveTab(hub){
     state.currentHub = hub;

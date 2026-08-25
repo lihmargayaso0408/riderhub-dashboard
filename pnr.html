@@ -474,6 +474,11 @@ const params = new URLSearchParams(window.location.search);
 
     applyHubFilter();
     loadSheet();
+
+    setInterval(async function(){
+      if(document.hidden) return;
+      await loadSheet();
+    }, 30000);
   </script>
 
   <!-- Shared Option Button / Options drawer (appears on all pages) -->
