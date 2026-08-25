@@ -305,7 +305,6 @@
     filterVehicle: '',
     filterGroup: '',
     filterGrade: '',
-    hideInactive: true,
     trendChart: null,
     weekPickerMonth: new Date(),
     weekPickerSelectedDate: null,
@@ -368,6 +367,7 @@ function fmtWeekLabel(d){
     wireStaticEvents();
     if(perms.role === 'admin') refreshAccessBadge();
     startAutoRefresh();
+    if (window.Chat) window.Chat.init();
   }
 
   let autoRefreshUnsub = null;
@@ -451,9 +451,6 @@ function fmtWeekLabel(d){
       if(!selDate) return null;
       const hd = state.hubIndex[hub] || [];
       if(!hd.length) return null;
-      if(state.frequency === 'daily'){
-        return hd.includes(selDate) ? selDate : latestDate(hd);
-      }
       if(state.frequency === 'monthly'){
         const sel = new Date(selDate + 'T00:00:00');
         const inMonth = hd.filter(d => {
@@ -770,7 +767,7 @@ function fmtWeekLabel(d){
       <div class="empty">
         <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#9AA1AC" stroke-width="1.6"><path d="M12 3v13M6 10l6-6 6 6M4 21h16"/></svg>
         <h3>No manifest on file for ${hubName}</h3>
-        <p>Upload the daily performance CSV to start tracking rider and hub performance.</p>
+        <p>Upload the weekly performance CSV to start tracking rider and hub performance.</p>
         <button class="btn-primary" id="emptyUploadBtn">Upload manifest</button>
       </div>`;
     $('#emptyUploadBtn').addEventListener('click', openModal);
@@ -825,7 +822,6 @@ html += '<div class="strip">';
     html += `<div class="table-panel">
       <div class="table-controls">
         <input type="text" id="searchInput" placeholder="Search rider name or ID…">
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-dim);"><input type="checkbox" id="hideInactiveToggle" ${state.hideInactive ? 'checked' : ''}> Hide inactive riders</label>
         <select id="vehicleFilter"><option value="">All vehicle types</option></select>
         <select id="groupFilter"><option value="">All driver groups</option></select>
 </div>
@@ -1044,7 +1040,7 @@ const entries = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
     {key:'vehicleType', label:'Vehicle', type:'text'},
     {key:'area', label:'Area', type:'text'},
     {key:'driverGroup', label:'Group', type:'text'},
-    {key:'attendDays', label:'Days', type:'num', hideOnDaily:true},
+    {key:'attendDays', label:'Days', type:'num'},
     {key:'avgParcelsPerDay', label:'Parcels/Day', type:'num1'},
     {key:'parcelsAssigned', label:'Parcels Assigned', type:'num'},
     {key:'parcelsOnHold', label:'On-hold', type:'num'},
@@ -1054,28 +1050,25 @@ const entries = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
 
   function setupTableControls(rows){
     const vSel = $('#vehicleFilter'), gSel = $('#groupFilter');
-    const visibleRows = state.hideInactive ? rows.filter(r=>Number(r.daysWorking||0)>0) : rows;
+    const visibleRows = rows.filter(isActiveRider);
     const vehicles = Array.from(new Set(visibleRows.map(r=>r.vehicleType).filter(Boolean))).sort();
     const groups = Array.from(new Set(visibleRows.map(r=>r.driverGroup).filter(Boolean))).sort();
     vSel.innerHTML = '<option value="">All vehicle types</option>';
     gSel.innerHTML = '<option value="">All driver groups</option>';
     vehicles.forEach(v=>{ const o=document.createElement('option'); o.value=v;o.textContent=v; vSel.appendChild(o); });
     groups.forEach(g=>{ const o=document.createElement('option'); o.value=g;o.textContent=g; gSel.appendChild(o); });
-vSel.value = state.filterVehicle; gSel.value = state.filterGroup;
+ vSel.value = state.filterVehicle; gSel.value = state.filterGroup;
     $('#searchInput').value = state.search;
-    $('#hideInactiveToggle').checked = state.hideInactive;
 
     $('#searchInput').addEventListener('input', e=>{ state.search=e.target.value; renderTable(); });
     vSel.addEventListener('change', e=>{ state.filterVehicle=e.target.value; renderTable(); });
-gSel.addEventListener('change', e=>{ state.filterGroup=e.target.value; renderTable(); });
-     $('#hideInactiveToggle').addEventListener('change', e=>{ state.hideInactive=e.target.checked; renderTable(); });
+ gSel.addEventListener('change', e=>{ state.filterGroup=e.target.value; renderTable(); });
 
     renderThead();
   }
 
   function visibleColumns(){
-    return COLUMNS.filter(c => !c.showOnlyAll || state.currentHub === 'All')
-      .filter(c => !(c.hideOnDaily && state.frequency === 'daily'));
+    return COLUMNS.filter(c => !c.showOnlyAll || state.currentHub === 'All');
   }
 
   function renderThead(){
@@ -1103,11 +1096,15 @@ gSel.addEventListener('change', e=>{ state.filterGroup=e.target.value; renderTab
     return 'rate-dark-red';
   }
 
+  function isActiveRider(r){
+    return Number(r.attendDays||0) > 0
+      || Number(r.parcelsAssigned||0) > 0
+      || Number(r.parcelsDelivered||0) > 0
+      || Number(r.deliverySuccessRate||0) > 0;
+  }
+
   function renderTable(){
-    let rows = state.rows.slice();
-    if(state.hideInactive){
-      rows = rows.filter(r=>Number(r.daysWorking||0) > 0);
-    }
+    let rows = state.rows.slice().filter(isActiveRider);
     if(state.search){
       const q = state.search.toLowerCase();
       rows = rows.filter(r => r.name.toLowerCase().includes(q) || String(r.id).includes(q));
@@ -1135,7 +1132,7 @@ if(c.type==='num1') return `<td class="num">${(r[c.key]||0).toFixed(1)}</td>`;
         return `<td>${escapeHtml(r[c.key])}</td>`;
       }).join('') + '</tr>';
     }).join('');
-    const totalBaseRows = state.hideInactive ? state.rows.filter(r=>Number(r.daysWorking||0) > 0).length : state.rows.length;
+    const totalBaseRows = state.rows.filter(isActiveRider).length;
     $('#rowCount').textContent = `Showing ${rows.length} of ${totalBaseRows} riders`;
     if(rows.length===0){
       tbody.innerHTML = `<tr><td colspan="${cols.length}" style="text-align:center;color:var(--text-dim);padding:24px;">No riders match these filters.</td></tr>`;
@@ -1329,9 +1326,7 @@ cells.forEach((day, index)=>{
 
       // Resolve the selected date to the actual stored snapshot date(s)
       let targetDates = [];
-      if(state.frequency === 'daily'){
-        targetDates = [state.currentDate];
-      } else if(state.frequency === 'monthly'){
+      if(state.frequency === 'monthly'){
         const sel = new Date(state.currentDate + 'T00:00:00');
         targetDates = allDatesForCurrentHub().filter(d => {
           const m = new Date(d + 'T00:00:00');

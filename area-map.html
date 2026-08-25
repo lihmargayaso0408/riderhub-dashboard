@@ -81,9 +81,56 @@
     .rider-popup .btn-remove:hover{background:var(--brick);color:#fff;}
 
     .coord-inputs{display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;}
-    .coord-inputs .field{margin:0;}
-    .coord-inputs input{width:140px;}
-    .coord-or{font-size:12px;color:var(--text-dim);padding:0 4px;}
+    .coord-inputs .field{margin:0;flex:1;}
+    .coord-inputs input{width:100%;min-width:200px;}
+
+    /* Modern Rider Selection */
+    .rider-select-modern{display:flex;flex-direction:column;gap:12px;}
+    .rider-search-input{
+      width:100%;padding:10px 14px 10px 38px;border:1px solid var(--line);border-radius:8px;
+      font-family:'IBM Plex Sans',sans-serif;font-size:13px;
+      background:var(--card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E") no-repeat 12px center;
+      color:var(--text);transition:border-color .2s ease,box-shadow .2s ease;
+    }
+    .rider-search-input:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 3px rgba(232,163,61,.15);}
+    .rider-cards-list{
+      display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto;
+      padding-right:4px;
+    }
+    .rider-cards-list::-webkit-scrollbar{width:6px;}
+    .rider-cards-list::-webkit-scrollbar-track{background:var(--line-2);border-radius:3px;}
+    .rider-cards-list::-webkit-scrollbar-thumb{background:var(--amber);border-radius:3px;}
+    .rider-card{
+      display:flex;align-items:center;gap:12px;
+      padding:12px 14px;border:1px solid var(--line-2);border-radius:10px;
+      background:var(--card);cursor:pointer;
+      transition:transform .2s cubic-bezier(.22,.61,.36,1),box-shadow .2s ease,border-color .2s ease;
+      animation:fadeUp .3s cubic-bezier(.22,.61,.36,1) both;
+    }
+    .rider-card:hover{transform:translateY(-2px);box-shadow:0 6px 18px var(--shadow);border-color:var(--amber);}
+    .rider-card:active{transform:scale(.98);}
+    .rider-card-avatar{
+      width:40px;height:40px;border-radius:50%;flex-shrink:0;
+      background:linear-gradient(135deg,var(--amber),var(--amber-deep));
+      color:var(--ink);display:flex;align-items:center;justify-content:center;
+      font-weight:700;font-size:14px;
+    }
+    .rider-card-info{flex:1;min-width:0;}
+    .rider-card-name{font-weight:600;font-size:13px;margin-bottom:4px;}
+    .rider-card-tags{display:flex;gap:6px;flex-wrap:wrap;}
+    .rider-card-tag{
+      display:inline-flex;align-items:center;gap:4px;
+      padding:2px 8px;border-radius:999px;font-size:10px;font-weight:600;
+      font-family:'IBM Plex Mono',monospace;
+    }
+    .rider-card-tag.hub{background:rgba(232,163,61,.15);color:var(--amber-deep);}
+    .rider-card-tag.status{background:rgba(52,211,153,.14);color:#22c55e;}
+    .rider-card-tag.status.suspended{background:rgba(239,68,68,.12);color:#ef4444;}
+    .rider-card-area{font-size:11px;color:var(--text-dim);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .rider-card-empty{padding:24px;text-align:center;color:var(--text-dim);font-size:13px;}
+    .rider-card-selected{border-color:var(--amber);box-shadow:0 0 0 2px var(--amber);}
+    .unplaced-count{font-size:12px;color:var(--text-dim);margin-bottom:8px;}
+    .unplaced-count strong{color:var(--amber-deep);}
   </style>
 </head>
 <body>
@@ -124,21 +171,18 @@
     <div id="map"></div>
 
     <div class="overlay" id="placeOverlay">
-      <div class="modal">
+      <div class="modal modal-wide">
         <h3>Place Rider on Map</h3>
-        <p class="hint">Select a rider, then enter coordinates or click the map to set the location.</p>
-        <div class="field">
-          <label for="riderSelect">Rider</label>
-          <select id="riderSelect"><option value="">Loading riders…</option></select>
+        <p class="hint">Select an unplaced rider, then enter coordinates or click the map to set the location.</p>
+        <div class="rider-select-modern">
+          <input type="text" class="rider-search-input" id="riderSearchInput" placeholder="Search riders by name, area, or hub...">
+          <div class="unplaced-count" id="unplacedCount"></div>
+          <div class="rider-cards-list" id="riderCardsList"></div>
         </div>
         <div class="coord-inputs">
-          <div class="field">
-            <label for="latInput">Latitude</label>
-            <input type="number" id="latInput" step="any" placeholder="e.g. 16.6833" />
-          </div>
-          <div class="field">
-            <label for="lngInput">Longitude</label>
-            <input type="number" id="lngInput" step="any" placeholder="e.g. 120.8333" />
+          <div class="field" style="flex:1;">
+            <label for="coordInput">Paste Coordinates</label>
+            <input type="text" id="coordInput" placeholder="e.g. 16.6833, 120.8333" />
           </div>
           <button type="button" class="toolbar-btn" id="useMapClickBtn" style="align-self:flex-end;">Click Map</button>
         </div>
@@ -231,6 +275,8 @@
     let placedRiders = [];
     let tempMarker = null;
     let mapClickHandler = null;
+    let placementArmed = false;
+    let placementToken = 0;
     let riderSuccessRate = {}; // riderName -> deliverySuccessRate (from performance data)
 
     // Load performance snapshots from Firestore to build success rate lookup
@@ -398,6 +444,22 @@
       return HUB_CENTER[hub] || [16.78, 120.80];
     }
 
+    function hasValidCoords(area, hub) {
+      return resolveCoords(area, hub) !== null;
+    }
+
+    function cleanupOrphanPins() {
+      const validRiderNames = new Set(allRows.map(r => r.riderName));
+      const before = placedRiders.length;
+      placedRiders = placedRiders.filter(r => validRiderNames.has(r.riderName));
+      return before - placedRiders.length;
+    }
+
+    function getUnplacedRiders() {
+      const placedNames = new Set(placedRiders.map(r => r.riderName));
+      return allRows.filter(r => !placedNames.has(r.riderName));
+    }
+
     function createRiderIcon(rider) {
       const color = HUB_COLOR[rider.hub] || '#5B6472';
       return L.divIcon({
@@ -454,18 +516,99 @@
       });
     }
 
+    function parseCoordinateString(str) {
+      if (!str || typeof str !== 'string') return null;
+      const parts = str.split(',').map(s => s.trim());
+      if (parts.length < 2) return null;
+      const lat = parseFloat(parts[0]);
+      const lng = parseFloat(parts[1]);
+      if (isNaN(lat) || isNaN(lng)) return null;
+      if (lat < -90 || lat > 90) return null;
+      if (lng < -180 || lng > 180) return null;
+      return { lat, lng };
+    }
+
+    let selectedRider = null;
+    let searchFilter = '';
+
     function openPlaceModal() {
       if (!isPlacing) return;
-      const select = document.getElementById('riderSelect');
-      select.innerHTML = '<option value="">Select a rider…</option>' + allRows.map(r =>
-        `<option value="${escapeHtml(r.riderName)}">${escapeHtml(r.riderName)} — ${escapeHtml(r.area || 'No area')} (${escapeHtml(r.hub || '')})</option>`
-      ).join('');
-      document.getElementById('latInput').value = '';
-      document.getElementById('lngInput').value = '';
-      document.getElementById('confirmPlace').disabled = true;
-      document.getElementById('clickHint').style.display = 'none';
-      if (tempMarker) { tempMarker.remove(); tempMarker = null; }
-      document.getElementById('placeOverlay').classList.add('show');
+      try {
+        selectedRider = null;
+        searchFilter = '';
+        document.getElementById('riderSearchInput').value = '';
+        document.getElementById('coordInput').value = '';
+        document.getElementById('confirmPlace').disabled = true;
+        document.getElementById('clickHint').style.display = 'none';
+        if (tempMarker) { tempMarker.remove(); tempMarker = null; }
+        renderUnplacedRiders();
+        document.getElementById('placeOverlay').classList.add('show');
+      } catch (err) {
+        console.error('openPlaceModal error:', err);
+        showToast('Error opening modal: ' + err.message);
+      }
+    }
+
+    function renderUnplacedRiders() {
+      const list = document.getElementById('riderCardsList');
+      const countEl = document.getElementById('unplacedCount');
+      const unplaced = getUnplacedRiders();
+      const filtered = searchFilter
+        ? unplaced.filter(r => {
+            const search = searchFilter.toLowerCase();
+            return (r.riderName || '').toLowerCase().includes(search)
+              || (r.area || '').toLowerCase().includes(search)
+              || (r.hub || '').toLowerCase().includes(search)
+              || (r.agency || '').toLowerCase().includes(search);
+          })
+        : unplaced;
+
+      if (countEl) {
+        countEl.innerHTML = `<strong>${unplaced.length}</strong> unplaced rider${unplaced.length === 1 ? '' : 's'}`;
+      }
+
+      if (filtered.length === 0) {
+        list.innerHTML = `<div class="card-empty">${unplaced.length === 0 ? 'All riders have been placed on the map.' : 'No riders match your search.'}</div>`;
+        return;
+      }
+
+      list.innerHTML = '';
+      filtered.forEach((rider, idx) => {
+        const card = document.createElement('div');
+        card.className = 'rider-card';
+        card.style.animationDelay = `${Math.min(idx * 0.03, 0.3)}s`;
+        const initials = getInitials(rider.riderName);
+        const statusClass = (r.status || '').toLowerCase().includes('suspend') ? 'suspended' : 'active';
+        const statusText = (r.status || '').toLowerCase().includes('suspend') ? 'Suspended' : 'Active';
+        card.innerHTML = `
+          <div class="rider-card-avatar">${escapeHtml(initials)}</div>
+          <div class="rider-card-info">
+            <div class="rider-card-name">${escapeHtml(r.riderName)}</div>
+            <div class="rider-card-tags">
+              <span class="rider-card-tag hub">${escapeHtml(r.hub || 'No hub')}</span>
+              <span class="rider-card-tag status ${statusClass}">${escapeHtml(statusText)}</span>
+            </div>
+            <div class="rider-card-area">${escapeHtml(r.area || 'No area')}</div>
+          </div>
+        `;
+        card.addEventListener('click', () => selectRider(rider, card));
+        list.appendChild(card);
+      });
+    }
+
+    function selectRider(rider, cardEl) {
+      selectedRider = rider;
+      document.querySelectorAll('.rider-card').forEach(c => c.classList.remove('rider-card-selected'));
+      if (cardEl) cardEl.classList.add('rider-card-selected');
+      updateConfirmButton();
+      if (map && rider.hub && HUB_CENTER[rider.hub]) {
+        map.flyTo(HUB_CENTER[rider.hub], 12, { duration: 0.8 });
+      }
+    }
+
+    function getInitials(name) {
+      if (!name) return '?';
+      return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
     }
 
     function closePlaceModal() {
@@ -473,22 +616,32 @@
       pendingLatLng = null;
       if (tempMarker) { tempMarker.remove(); tempMarker = null; }
       document.getElementById('clickHint').style.display = 'none';
+      placementArmed = false;
       if (mapClickHandler) {
         map.off('click', mapClickHandler);
         mapClickHandler = null;
       }
     }
 
+    function deactivatePlacement() {
+      isPlacing = false;
+      placementArmed = false;
+      placementToken++;
+      if (placeRiderBtn) placeRiderBtn.classList.remove('active');
+      const mapEl = document.getElementById('map');
+      if (mapEl) mapEl.classList.remove('placement-mode');
+      closePlaceModal();
+    }
+
     function updateConfirmButton() {
-      const lat = parseFloat(document.getElementById('latInput').value);
-      const lng = parseFloat(document.getElementById('lngInput').value);
-      const riderSelected = document.getElementById('riderSelect').value;
-      const valid = riderSelected && !isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+      const coordStr = document.getElementById('coordInput').value.trim();
+      const parsed = parseCoordinateString(coordStr);
+      const valid = selectedRider && parsed !== null;
       document.getElementById('confirmPlace').disabled = !valid;
       if (valid) {
-        pendingLatLng = { lat, lng };
+        pendingLatLng = parsed;
         if (tempMarker) tempMarker.remove();
-        tempMarker = L.marker([lat, lng], {
+        tempMarker = L.marker([parsed.lat, parsed.lng], {
           icon: L.divIcon({
             className: 'rider-marker-wrapper',
             html: `<div class="rider-marker-icon" style="background:#E8A33D;"></div>`,
@@ -496,51 +649,59 @@
             iconAnchor: [9, 9]
           })
         }).addTo(map);
-        map.panTo([lat, lng]);
+        map.panTo([parsed.lat, parsed.lng]);
       }
     }
 
-    function enableMapClick() {
-      document.getElementById('clickHint').style.display = '';
-      if (mapClickHandler) map.off('click', mapClickHandler);
+    function armPlacementHandler() {
+      if (!isPlacing || !map) return;
+      placementArmed = false;
+      const token = ++placementToken;
       mapClickHandler = async (e) => {
+        if (!isPlacing || !placementArmed || placementToken !== token) return;
+        placementArmed = false;
         const lat = e.latlng.lat;
         const lng = e.latlng.lng;
-        document.getElementById('latInput').value = lat.toFixed(6);
-        document.getElementById('lngInput').value = lng.toFixed(6);
-        updateConfirmButton();
-        document.getElementById('clickHint').style.display = 'none';
-        map.off('click', mapClickHandler);
-        mapClickHandler = null;
+        if (!selectedRider) {
+          document.getElementById('coordInput').value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+          showToast('Please select an unplaced rider from the list first.');
+          armPlacementHandler();
+          return;
+        }
+        pendingLatLng = { lat, lng };
+        document.getElementById('coordInput').value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        await confirmPlaceRider();
       };
-      map.on('click', mapClickHandler);
+      map.once('click', mapClickHandler);
+      placementArmed = true;
+      document.getElementById('clickHint').style.display = '';
+    }
+
+    function enableMapClick() {
+      armPlacementHandler();
     }
 
     async function confirmPlaceRider() {
-      const select = document.getElementById('riderSelect');
-      const riderName = select.value;
-      const lat = parseFloat(document.getElementById('latInput').value);
-      const lng = parseFloat(document.getElementById('lngInput').value);
-      if (!riderName || isNaN(lat) || isNaN(lng)) return;
-      const rider = allRows.find(r => r.riderName === riderName) || { riderName, hub: '', area: '', agency: '' };
+      if (!selectedRider || !pendingLatLng) {
+        if (!selectedRider) showToast('Please select an unplaced rider from the list first.');
+        return;
+      }
+      const rider = selectedRider;
       const record = {
         id: 'placed_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
-        lat,
-        lng,
+        lat: pendingLatLng.lat,
+        lng: pendingLatLng.lng,
         riderName: rider.riderName,
         hub: rider.hub,
         area: rider.area,
         agency: rider.agency,
-        successRate: riderSuccessRate[normName(riderName)] ?? null,
+        successRate: riderSuccessRate[normName(rider.riderName)] ?? null,
         placedAt: new Date().toISOString()
       };
       placedRiders.push(record);
       await savePlacedRiders();
       renderPlacedRiders();
-      closePlaceModal();
-      isPlacing = false;
-      placeRiderBtn.classList.remove('active');
-      document.getElementById('map').classList.remove('placement-mode');
+      deactivatePlacement();
       showToast(`Placed <b>${escapeHtml(rider.riderName)}</b> on the map.`);
     }
 
@@ -577,17 +738,15 @@
       markerLayer = L.layerGroup().addTo(map);
       placedRiderLayer = L.layerGroup().addTo(map);
 
-      map.on('popupopen', (e) => {
-        const popup = e.popup;
-        const btn = popup.getElement() ? popup.getElement().querySelector('.btn-remove') : null;
+      const mapContainer = map.getContainer();
+      mapContainer.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.btn-remove');
         if (!btn) return;
-        btn.addEventListener('click', async () => {
-          const id = btn.dataset.id;
-          placedRiders = placedRiders.filter(r => r.id !== id);
-          await savePlacedRiders();
-          renderPlacedRiders();
-          showToast('Rider removed from map.');
-        });
+        const id = btn.dataset.id;
+        placedRiders = placedRiders.filter(r => r.id !== id);
+        await savePlacedRiders();
+        renderPlacedRiders();
+        showToast('Rider removed from map.');
       });
     }
 
@@ -598,8 +757,10 @@
       const areas = groupByArea(rows);
 
       const bounds = [];
+      let plottedAreas = 0;
       for (const a of areas) {
-        const initial = resolveCoords(a.area, a.hub) || fallbackCoords(a.area, a.hub);
+        if (!hasValidCoords(a.area, a.hub)) continue;
+        const initial = resolveCoords(a.area, a.hub);
         const count = a.riders.length;
         const radius = Math.max(7, Math.min(26, 6 + count * 1.4));
         const color = HUB_COLOR[a.hub] || '#5B6472';
@@ -627,6 +788,7 @@
         }).bindTooltip(popupHtml, { direction: 'top', opacity: 1, className: 'area-hover-tip' }).addTo(markerLayer);
 
         bounds.push(initial);
+        plottedAreas++;
       }
 
       const visiblePlaced = currentHub === 'All'
@@ -639,7 +801,7 @@
       if (bounds.length) {
         map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
       }
-      statusEl.textContent = `Plotted ${areas.length} area${areas.length === 1 ? '' : 's'} · ${rows.length} riders`;
+      statusEl.textContent = `Plotted ${plottedAreas} area${plottedAreas === 1 ? '' : 's'} · ${rows.length} riders · ${placedRiders.length} placed`;
     }
 
     function resetMap() {
@@ -674,25 +836,33 @@
       placeRiderBtn.style.display = '';
     }
     placeRiderBtn.addEventListener('click', () => {
-      isPlacing = !isPlacing;
-      placeRiderBtn.classList.toggle('active', isPlacing);
-      document.getElementById('map').classList.toggle('placement-mode', isPlacing);
-      if (isPlacing) {
-        openPlaceModal();
-        showToast('Select a rider and enter coordinates or click the map.');
-      } else {
-        closePlaceModal();
+      try {
+        isPlacing = !isPlacing;
+        placeRiderBtn.classList.toggle('active', isPlacing);
+        document.getElementById('map').classList.toggle('placement-mode', isPlacing);
+        if (isPlacing) {
+          openPlaceModal();
+          armPlacementHandler();
+          showToast('Select an unplaced rider, then click the map to place them.');
+        } else {
+          deactivatePlacement();
+        }
+      } catch (err) {
+        console.error('Place Rider button error:', err);
+        showToast('Error: ' + err.message);
       }
     });
 
-    document.getElementById('riderSelect').addEventListener('change', updateConfirmButton);
-    document.getElementById('latInput').addEventListener('input', updateConfirmButton);
-    document.getElementById('lngInput').addEventListener('input', updateConfirmButton);
+    document.getElementById('riderSearchInput').addEventListener('input', (e) => {
+      searchFilter = e.target.value.trim();
+      renderUnplacedRiders();
+    });
+    document.getElementById('coordInput').addEventListener('input', updateConfirmButton);
     document.getElementById('useMapClickBtn').addEventListener('click', enableMapClick);
-    document.getElementById('cancelPlace').addEventListener('click', closePlaceModal);
+    document.getElementById('cancelPlace').addEventListener('click', deactivatePlacement);
     document.getElementById('confirmPlace').addEventListener('click', confirmPlaceRider);
     document.getElementById('placeOverlay').addEventListener('click', (e) => {
-      if (e.target.id === 'placeOverlay') closePlaceModal();
+      if (e.target.id === 'placeOverlay') deactivatePlacement();
     });
 
     if (typeof window.applySavedTheme === 'function') window.applySavedTheme();
@@ -705,6 +875,8 @@
         await loadPerformanceData();
         initMap();
         placedRiders = await loadPlacedRiders();
+        const orphans = cleanupOrphanPins();
+        if (orphans > 0) await savePlacedRiders();
         renderPlacedRiders();
         await renderMap();
       } catch (err) {
@@ -720,6 +892,8 @@
         if(n){
           applyHubFilter();
           await loadPerformanceData();
+          const orphans = cleanupOrphanPins();
+          if (orphans > 0) await savePlacedRiders();
           renderPlacedRiders();
           await renderMap();
           showToast('Area map updated automatically');
