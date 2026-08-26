@@ -800,42 +800,9 @@
       if (!map) initMap();
       markerLayer.clearLayers();
       const rows = getFilteredRows();
-      const areas = groupByArea(rows);
 
       const bounds = [];
       let plottedAreas = 0;
-      for (const a of areas) {
-        if (!hasValidCoords(a.area, a.hub)) continue;
-        const initial = getCoords(a.area, a.hub);
-        const count = a.riders.length;
-        const radius = Math.max(7, Math.min(26, 6 + count * 1.4));
-        const color = HUB_COLOR[a.hub] || '#5B6472';
-
-        const popupHtml = `<h4>${escapeHtml(a.area)}</h4>`
-          + `<div class="muted" style="margin-bottom:6px;">${count} rider${count === 1 ? '' : 's'} · ${escapeHtml(a.hub)}</div>`
-          + a.riders.map(r => {
-              const rate = riderSuccessRate[normName(r.riderName)];
-              const rateHtml = rate != null
-                ? `<span class="agency">SR</span> <span class="area-count" style="color:${rateColor(rate)};">${rate}%</span>`
-                : `<span class="area-count muted">—</span>`;
-              const statusHtml = r.status ? `<span class="agency">${escapeHtml(r.status)}</span>` : '';
-              return `<div class="area-rider">
-                <span><b>${escapeHtml(r.riderName)}</b> <span class="agency">${escapeHtml(r.agency || '')}</span></span>
-                <span style="display:flex;align-items:center;gap:8px;">${statusHtml}${rateHtml}</span>
-              </div>`;
-            }).join('');
-
-        const marker = L.circleMarker(initial, {
-          radius,
-          color: color,
-          weight: 2,
-          fillColor: color,
-          fillOpacity: 0.55
-        }).bindTooltip(popupHtml, { direction: 'top', opacity: 1, className: 'area-hover-tip' }).addTo(markerLayer);
-
-        bounds.push(initial);
-        plottedAreas++;
-      }
 
       const visiblePlaced = currentHub === 'All'
         ? placedRiders
@@ -847,7 +814,7 @@
       if (bounds.length) {
         map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
       }
-      statusEl.textContent = `Plotted ${plottedAreas} area${plottedAreas === 1 ? '' : 's'} · ${rows.length} riders · ${placedRiders.length} placed`;
+      statusEl.textContent = `Placed ${placedRiders.length} rider${placedRiders.length === 1 ? '' : 's'} · ${rows.length} riders in sheet`;
     }
 
     function resetMap() {
