@@ -196,8 +196,6 @@
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-  <script type="module" src="chat.js"></script>
-  <script src="chat-widget.js" defer></script>
   <script type="module">
     const __perms = await window.Auth.guard('map');
     if (!__perms) throw new Error('redirect');
@@ -447,7 +445,11 @@
     }
 
     function hasValidCoords(area, hub) {
-      return resolveCoords(area, hub) !== null;
+      return resolveCoords(area, hub) !== null || fallbackCoords(area, hub) !== null;
+    }
+
+    function getCoords(area, hub) {
+      return resolveCoords(area, hub) || fallbackCoords(area, hub);
     }
 
     function cleanupOrphanPins() {
@@ -543,8 +545,40 @@
         document.getElementById('confirmPlace').disabled = true;
         document.getElementById('clickHint').style.display = 'none';
         if (tempMarker) { tempMarker.remove(); tempMarker = null; }
-        renderUnplacedRiders();
-        document.getElementById('placeOverlay').classList.add('show');
+        
+        const list = document.getElementById('riderCardsList');
+        const countEl = document.getElementById('unplacedCount');
+        
+        if (!list) {
+          console.error('riderCardsList element not found');
+          showToast('Error: rider list container not found');
+          return;
+        }
+        
+        if (!countEl) {
+          console.error('unplacedCount element not found');
+        }
+        
+        const unplaced = getUnplacedRiders();
+        console.log('openPlaceModal: allRows count =', allRows.length, 'unplaced count =', unplaced.length);
+        
+        if (countEl) {
+          countEl.innerHTML = `<strong>${unplaced.length}</strong> unplaced rider${unplaced.length === 1 ? '' : 's'}`;
+        }
+        
+        if (unplaced.length === 0) {
+          list.innerHTML = '<div class="card-empty">No unplaced riders found. All riders may already be placed on the map.</div>';
+        } else {
+          renderUnplacedRiders();
+        }
+        
+        const overlay = document.getElementById('placeOverlay');
+        if (overlay) {
+          overlay.classList.add('show');
+          console.log('Place Rider modal opened');
+        } else {
+          console.error('placeOverlay element not found');
+        }
       } catch (err) {
         console.error('openPlaceModal error:', err);
         showToast('Error opening modal: ' + err.message);
@@ -658,28 +692,38 @@
     function armPlacementHandler() {
       if (!isPlacing || !map) return;
       placementArmed = false;
+
+      if (mapClickHandler) {
+        map.off('click', mapClickHandler);
+        mapClickHandler = null;
+      }
+
       const token = ++placementToken;
       mapClickHandler = async (e) => {
-        if (!isPlacing || !placementArmed || placementToken !== token) return;
+        if (!isPlacing || placementToken !== token) return;
         placementArmed = false;
         const lat = e.latlng.lat;
         const lng = e.latlng.lng;
         if (!selectedRider) {
           document.getElementById('coordInput').value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
           showToast('Please select an unplaced rider from the list first.');
-          armPlacementHandler();
+          document.getElementById('placeOverlay').classList.add('show');
+          placementArmed = true;
           return;
         }
         pendingLatLng = { lat, lng };
         document.getElementById('coordInput').value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        document.getElementById('placeOverlay').classList.add('show');
+        updateConfirmButton();
         await confirmPlaceRider();
       };
-      map.once('click', mapClickHandler);
+      map.on('click', mapClickHandler);
       placementArmed = true;
       document.getElementById('clickHint').style.display = '';
     }
 
     function enableMapClick() {
+      document.getElementById('placeOverlay').classList.remove('show');
       armPlacementHandler();
     }
 
@@ -762,7 +806,7 @@
       let plottedAreas = 0;
       for (const a of areas) {
         if (!hasValidCoords(a.area, a.hub)) continue;
-        const initial = resolveCoords(a.area, a.hub);
+        const initial = getCoords(a.area, a.hub);
         const count = a.riders.length;
         const radius = Math.max(7, Math.min(26, 6 + count * 1.4));
         const color = HUB_COLOR[a.hub] || '#5B6472';
@@ -836,12 +880,14 @@
     const placeRiderBtn = document.getElementById('placeRiderBtn');
     if (__perms && __perms.role === 'admin') {
       placeRiderBtn.style.display = '';
+      placeRiderBtn.disabled = true;
     }
     placeRiderBtn.addEventListener('click', () => {
       try {
         isPlacing = !isPlacing;
         placeRiderBtn.classList.toggle('active', isPlacing);
-        document.getElementById('map').classList.toggle('placement-mode', isPlacing);
+        const mapEl = document.getElementById('map');
+        if (mapEl) mapEl.classList.toggle('placement-mode', isPlacing);
         if (isPlacing) {
           openPlaceModal();
           armPlacementHandler();
@@ -881,6 +927,7 @@
         if (orphans > 0) await savePlacedRiders();
         renderPlacedRiders();
         await renderMap();
+        if (placeRiderBtn) placeRiderBtn.disabled = false;
       } catch (err) {
         console.error(err);
         statusEl.innerHTML = '<span class="error">Could not load the Riders sheet. Check the link and try again.</span>';

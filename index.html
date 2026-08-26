@@ -214,7 +214,6 @@
        <div id="weekHint" style="font-size:12px;color:var(--text-dim);margin-top:6px;">Pick the date for this manifest. Today is highlighted.</div>
     </div>
     <div class="field">
-      <label>File</label>
       <label class="drop" id="dropZone" for="fileInput">
         <input type="file" id="fileInput" accept=".csv" class="visually-hidden">
         <div id="dropText"><b>Click to choose</b> or drag a .csv file here</div>
@@ -309,42 +308,6 @@
   </div>
 </div>
 
-<!-- Floating Chat -->
-<button class="chat-fab" id="chatFab" aria-label="Open chat" type="button">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-  <span class="chat-fab-badge" id="chatFabBadge" hidden>0</span>
-</button>
-<aside class="chat-panel" id="chatPanel" aria-hidden="true">
-  <div class="chat-panel-head">
-    <div class="chat-panel-head-title">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-      <h3>Messages</h3>
-    </div>
-    <button class="chat-panel-close" id="chatPanelClose" type="button" aria-label="Close chat">×</button>
-  </div>
-  <div class="chat-panel-body" id="chatPanelBody">
-    <div class="chat-user-select" id="chatUserSelect">
-      <p class="chat-user-select-title">Select a user to start chatting</p>
-      <input type="text" class="chat-user-search" id="chatUserSearch" placeholder="Search users..." autocomplete="off">
-      <div class="chat-user-list" id="chatUserList"></div>
-    </div>
-    <div class="chat-conversation" id="chatConversation" hidden>
-      <button class="chat-back-btn" id="chatBackBtn" type="button">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-        Back
-      </button>
-      <div class="chat-partner-name" id="chatPartnerName"></div>
-      <div class="chat-messages" id="chatMessages"></div>
-      <form class="chat-input-form" id="chatInputForm">
-        <input type="text" class="chat-input" id="chatInput" placeholder="Type a message..." autocomplete="off">
-        <button type="submit" class="chat-send-btn" aria-label="Send message">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-        </button>
-      </form>
-    </div>
-  </div>
-</aside>
-
 <!-- Firebase Config (Standard Script) -->
 <script src="firebase-config.js"></script>
 
@@ -353,12 +316,6 @@
 
 <!-- Auth + access control (Module Script) -->
 <script type="module" src="auth.js"></script>
-
-  <!-- Chat module (Module Script) -->
-  <script type="module" src="chat.js"></script>
-
-  <!-- Chat widget (adds Messages to drawer, ensures chat works everywhere) -->
-  <script type="module" src="chat-widget.js"></script>
 
   <!-- Your Main Logic -->
   <script type="module" src="script.js"></script>
