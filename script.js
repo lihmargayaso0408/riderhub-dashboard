@@ -338,42 +338,46 @@ function fmtWeekLabel(d){
   }
 
   async function init(){
-    const perms = await window.Auth.guard();
-    if(!perms) return; // redirected to login
-    state.perms = perms;
+    try {
+      const perms = await window.Auth.guard();
+      if(!perms) return; // redirected to login
+      state.perms = perms;
 
-    const currentUser = window.Auth.currentUser();
-    if(!currentUser){
-      showToast('Session expired. Please sign in again.');
-      setTimeout(()=>{ window.location.href='login.html'; }, 1500);
-      return;
-    }
+      const currentUser = window.Auth.currentUser();
+      if(!currentUser){
+        showToast('Session expired. Please sign in again.');
+        setTimeout(()=>{ window.location.href='login.html'; }, 1500);
+        return;
+      }
 
-    if(!hasFirebaseStorage){
-      $('#storageBanner').innerHTML = `<div class="banner">
-        <span>Firebase is not configured yet. Please add your Firebase config before uploading manifests.</span>
-        <button id="dismissBanner">Dismiss</button>
-      </div>`;
-      const db = document.getElementById('dismissBanner');
-      if(db) db.addEventListener('click', ()=>{ $('#storageBanner').innerHTML=''; });
+      if(!hasFirebaseStorage){
+        $('#storageBanner').innerHTML = `<div class="banner">
+          <span>Firebase is not configured yet. Please add your Firebase config before uploading manifests.</span>
+          <button id="dismissBanner">Dismiss</button>
+        </div>`;
+        const db = document.getElementById('dismissBanner');
+        if(db) db.addEventListener('click', ()=>{ $('#storageBanner').innerHTML=''; });
+      }
+      window.addEventListener('error', function(e){
+        showToast('Something went wrong: ' + (e.message || 'unknown error'));
+      });
+      const theme = await loadTheme();
+      applyTheme(theme);
+      state.hubIndex = await getIndex();
+      state.summaries.Bauko = await getSummary('Bauko');
+      state.summaries['MB Atok'] = await getSummary('MB Atok');
+      state.summaries.Buguias = await getSummary('Buguias');
+      areaLookup = await buildAreaLookup();
+      pnrLookup = await buildPnrLookup();
+      applyAccessControl(perms);
+      await refreshView();
+      wireStaticEvents();
+      if(perms.role === 'admin') refreshAccessBadge();
+      startAutoRefresh();
+    } catch(err) {
+      console.error('Dashboard init failed:', err);
+      $('#content').innerHTML = '<div class="empty"><h3>Failed to load dashboard</h3><p>' + (err && err.message ? err.message : 'Unknown error') + '</p><p>Check the browser console (F12) for details.</p></div>';
     }
-    window.addEventListener('error', function(e){
-      showToast('Something went wrong: ' + (e.message || 'unknown error'));
-    });
-    const theme = await loadTheme();
-    applyTheme(theme);
-    state.hubIndex = await getIndex();
-    state.summaries.Bauko = await getSummary('Bauko');
-    state.summaries['MB Atok'] = await getSummary('MB Atok');
-    state.summaries.Buguias = await getSummary('Buguias');
-    // Build rider name -> Area lookup from the Riders & Agency sheet
-    areaLookup = await buildAreaLookup();
-    pnrLookup = await buildPnrLookup();
-    applyAccessControl(perms);
-    await refreshView();
-    wireStaticEvents();
-    if(perms.role === 'admin') refreshAccessBadge();
-    startAutoRefresh();
   }
 
   let autoRefreshUnsub = null;
