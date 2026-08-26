@@ -116,8 +116,13 @@ const Auth = {
     }
     const allowedPages = profile.pages === undefined || profile.pages === null ? fullPages() : profile.pages;
     if (pageKey && allowedPages.indexOf(pageKey) === -1) {
-      window.location.href = 'login.html';
+      window.location.href = 'index.html';
       return null;
+    }
+    try {
+      await user.getIdToken(true);
+    } catch (e) {
+      console.error('Token refresh failed in guard:', e);
     }
     return profile;
   },

@@ -325,6 +325,7 @@
   <div class="chat-panel-body" id="chatPanelBody">
     <div class="chat-user-select" id="chatUserSelect">
       <p class="chat-user-select-title">Select a user to start chatting</p>
+      <input type="text" class="chat-user-search" id="chatUserSearch" placeholder="Search users..." autocomplete="off">
       <div class="chat-user-list" id="chatUserList"></div>
     </div>
     <div class="chat-conversation" id="chatConversation" hidden>
@@ -353,10 +354,13 @@
 <!-- Auth + access control (Module Script) -->
 <script type="module" src="auth.js"></script>
 
-<!-- Chat module (Module Script) -->
-<script type="module" src="chat.js"></script>
+  <!-- Chat module (Module Script) -->
+  <script type="module" src="chat.js"></script>
 
-<!-- Your Main Logic -->
-<script src="script.js" defer></script>
+  <!-- Chat widget (adds Messages to drawer, ensures chat works everywhere) -->
+  <script type="module" src="chat-widget.js"></script>
+
+  <!-- Your Main Logic -->
+  <script type="module" src="script.js"></script>
 </body>
 </html>

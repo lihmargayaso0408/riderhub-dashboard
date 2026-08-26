@@ -342,6 +342,13 @@ function fmtWeekLabel(d){
     if(!perms) return; // redirected to login
     state.perms = perms;
 
+    const currentUser = window.Auth.currentUser();
+    if(!currentUser){
+      showToast('Session expired. Please sign in again.');
+      setTimeout(()=>{ window.location.href='login.html'; }, 1500);
+      return;
+    }
+
     if(!hasFirebaseStorage){
       $('#storageBanner').innerHTML = `<div class="banner">
         <span>Firebase is not configured yet. Please add your Firebase config before uploading manifests.</span>
@@ -367,7 +374,6 @@ function fmtWeekLabel(d){
     wireStaticEvents();
     if(perms.role === 'admin') refreshAccessBadge();
     startAutoRefresh();
-    if (window.Chat) window.Chat.init();
   }
 
   let autoRefreshUnsub = null;
