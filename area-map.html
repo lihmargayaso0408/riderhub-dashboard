@@ -614,17 +614,17 @@
         card.className = 'rider-card';
         card.style.animationDelay = `${Math.min(idx * 0.03, 0.3)}s`;
         const initials = getInitials(rider.riderName);
-        const statusClass = (r.status || '').toLowerCase().includes('suspend') ? 'suspended' : 'active';
-        const statusText = (r.status || '').toLowerCase().includes('suspend') ? 'Suspended' : 'Active';
+        const statusClass = (rider.status || '').toLowerCase().includes('suspend') ? 'suspended' : 'active';
+        const statusText = (rider.status || '').toLowerCase().includes('suspend') ? 'Suspended' : 'Active';
         card.innerHTML = `
           <div class="rider-card-avatar">${escapeHtml(initials)}</div>
           <div class="rider-card-info">
-            <div class="rider-card-name">${escapeHtml(r.riderName)}</div>
+            <div class="rider-card-name">${escapeHtml(rider.riderName)}</div>
             <div class="rider-card-tags">
-              <span class="rider-card-tag hub">${escapeHtml(r.hub || 'No hub')}</span>
+              <span class="rider-card-tag hub">${escapeHtml(rider.hub || 'No hub')}</span>
               <span class="rider-card-tag status ${statusClass}">${escapeHtml(statusText)}</span>
             </div>
-            <div class="rider-card-area">${escapeHtml(r.area || 'No area')}</div>
+            <div class="rider-card-area">${escapeHtml(rider.area || 'No area')}</div>
           </div>
         `;
         card.addEventListener('click', () => selectRider(rider, card));
