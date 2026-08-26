@@ -56,8 +56,12 @@ const Chat = {
     }
     if (!this._currentUser) return;
     this._bindUI();
-    this._loadUsers();
     this._setupUnsubListener();
+    try {
+      await this._loadUsersWithRetry();
+    } catch (e) {
+      console.error('Chat: init load users failed', e);
+    }
   },
 
   _setupUnsubListener() {
@@ -112,29 +116,58 @@ const Chat = {
     }
   },
 
+  async _loadUsersWithRetry() {
+    const maxRetries = 3;
+    const baseDelay = 1000;
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        await this._loadUsers();
+        return;
+      } catch (e) {
+        const isPermission = e && e.code === 'permission-denied';
+        const delay = baseDelay * Math.pow(2, i);
+        console.error(`Chat: load users attempt ${i + 1} failed`, e);
+        if (isPermission) {
+          const list = document.getElementById('chatUserList');
+          if (list) {
+            list.innerHTML = '<div class="chat-empty-state">Chat access denied. Ask the owner to check Firestore permissions.</div>';
+          }
+          return;
+        }
+        if (i < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+    const list = document.getElementById('chatUserList');
+    if (list) {
+      list.innerHTML = '<div class="chat-empty-state">Could not load users. Please refresh.</div>';
+    }
+  },
+
   async _loadUsers() {
     const list = document.getElementById('chatUserList');
     if (!list) return;
     list.innerHTML = '<div class="chat-empty-state">Loading users...</div>';
 
-    try {
-      const q = query(
-        collection(db, 'users'),
-        where('status', '==', 'approved')
-      );
-      this._unsubUsers = onSnapshot(q, (snapshot) => {
+    const q = query(
+      collection(db, 'users'),
+      where('status', '==', 'approved')
+    );
+
+    this._unsubUsers = await new Promise((resolve, reject) => {
+      onSnapshot(q, (snapshot) => {
         this._users = snapshot.docs
           .map(d => ({ uid: d.id, ...d.data() }))
           .filter(u => u.uid !== this._currentUser?.uid);
         this._renderUserList();
+        resolve();
       }, (err) => {
         console.error('Chat: failed to load users', err);
         list.innerHTML = '<div class="chat-empty-state">Failed to load users</div>';
+        reject(err);
       });
-    } catch (err) {
-      console.error('Chat: error loading users', err);
-      list.innerHTML = '<div class="chat-empty-state">Error loading users</div>';
-    }
+    });
   },
 
   _renderUserList() {
@@ -236,7 +269,12 @@ const Chat = {
       }
     }, (err) => {
       console.error('Chat: messages listener error', err);
-      if (messagesEl) messagesEl.innerHTML = '<div class="chat-empty-state">Failed to load messages</div>';
+      if (messagesEl) {
+        const isPerm = err && err.code === 'permission-denied';
+        messagesEl.innerHTML = isPerm
+          ? '<div class="chat-empty-state">Message access denied. Ask the owner to check Firestore chat rules.</div>'
+          : '<div class="chat-empty-state">Failed to load messages. Retrying...</div>';
+      }
       setTimeout(() => this._subscribeMessages(otherUid), 3000);
     });
   },

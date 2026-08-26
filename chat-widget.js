@@ -179,7 +179,6 @@
   async function start() {
     try {
       injectChatHTML();
-      wireChatEvents();
       await loadChatModule();
       initChat();
       await waitForDrawer();
