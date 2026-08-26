@@ -789,7 +789,7 @@ function fmtWeekLabel(d){
     }
 
     $('#viewSub').textContent = state.currentHub==='All'
-      ? 'Combined snapshot — each hub shown as of its latest upload'
+      ? 'Record from last week'
       : `Snapshot for ${fmtDate(state.currentDate)}`;
 
     await renderContent();
