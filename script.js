@@ -436,10 +436,27 @@ function fmtWeekLabel(d){
 
   function setActiveTab(hub){
     state.currentHub = hub;
-    $$('.route-stop').forEach(el=>{
-      el.classList.toggle('active', el.dataset.hub===hub);
-      el.setAttribute('aria-pressed', el.dataset.hub===hub ? 'true' : 'false');
+    const valueEl = $('#hubDropdownValue');
+    const trigger = $('#hubDropdownTrigger');
+    if(valueEl) valueEl.textContent = hub==='All' ? 'All Hubs' : hub;
+    $$('#hubDropdownMenu .hub-dropdown-option').forEach(opt=>{
+      opt.classList.toggle('active', opt.dataset.value===hub);
     });
+    if(trigger) trigger.setAttribute('aria-expanded', 'false');
+    closeHubDropdownMenu();
+  }
+
+  function openHubDropdownMenu(){
+    const menu = $('#hubDropdownMenu');
+    const trigger = $('#hubDropdownTrigger');
+    if(menu) menu.classList.add('open');
+    if(trigger) trigger.setAttribute('aria-expanded', 'true');
+  }
+  function closeHubDropdownMenu(){
+    const menu = $('#hubDropdownMenu');
+    const trigger = $('#hubDropdownTrigger');
+    if(menu) menu.classList.remove('open');
+    if(trigger) trigger.setAttribute('aria-expanded', 'false');
   }
 
   function allowedHubs(){
@@ -476,13 +493,28 @@ function fmtWeekLabel(d){
     }
 
   function applyAccessControl(perms){
-    // Hide route stops the user isn't allowed to view.
     const allowed = allowedHubs();
-    $$('.route-stop').forEach(el=>{
-      const hub = el.dataset.hub;
-      const ok = hub==='All' ? allowed.length>1 : allowed.includes(hub);
-      el.style.display = ok ? '' : 'none';
-    });
+    const menu = $('#hubDropdownMenu');
+    if(menu){
+      menu.innerHTML = '';
+      const allLabel = allowed.length > 1 ? 'All Hubs' : (allowed[0] || 'All');
+      const allOpt = document.createElement('button');
+      allOpt.type = 'button';
+      allOpt.className = 'hub-dropdown-option active';
+      allOpt.dataset.value = 'All';
+      allOpt.textContent = allLabel;
+      allOpt.setAttribute('role', 'option');
+      menu.appendChild(allOpt);
+      allowed.forEach(hub => {
+        const opt = document.createElement('button');
+        opt.type = 'button';
+        opt.className = 'hub-dropdown-option';
+        opt.dataset.value = hub;
+        opt.textContent = hub;
+        opt.setAttribute('role', 'option');
+        menu.appendChild(opt);
+      });
+    }
     state.currentHub = allowed.length>1 ? 'All' : (allowed[0]||'All');
     setActiveTab(state.currentHub);
 
@@ -1716,13 +1748,27 @@ function closeSettingsMenu(){
   }
 
   function wireStaticEvents(){
-    $$('.route-stop').forEach(el=>{
-      el.addEventListener('click', async ()=>{
-        setActiveTab(el.dataset.hub);
+    const trigger = $('#hubDropdownTrigger');
+    const menu = $('#hubDropdownMenu');
+    if(trigger && menu){
+      trigger.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        const isOpen = menu.classList.contains('open');
+        if(isOpen){ closeHubDropdownMenu(); }
+        else { openHubDropdownMenu(); }
+      });
+      menu.addEventListener('click', async (e)=>{
+        const opt = e.target.closest('.hub-dropdown-option');
+        if(!opt) return;
+        const hub = opt.dataset.value;
+        setActiveTab(hub);
         state.currentDate = null;
         await refreshView();
       });
-    });
+      document.addEventListener('click', ()=>{
+        closeHubDropdownMenu();
+      });
+    }
 
      $('#datePickerBtn').addEventListener('click', e=>{
        e.stopPropagation();

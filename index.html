@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Rider Performance System — Rider & Hub Performance</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdnjs.cloudflare.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -36,21 +37,15 @@
       </div>
     </div>
   </div>
-  <div class="route">
-    <div class="route-track"></div>
-    <div class="route-truck" id="routeTruck"></div>
-    <button class="route-stop route-left" data-hub="All">
-      <span class="route-dot"></span><span class="route-label">All Hubs</span>
-    </button>
-    <button class="route-stop" data-hub="Buguias">
-      <span class="route-dot"></span><span class="route-label">Buguias</span>
-    </button>
-    <button class="route-stop" data-hub="MB Atok">
-      <span class="route-dot"></span><span class="route-label">MB Atok</span>
-    </button>
-    <button class="route-stop route-right" data-hub="Bauko">
-      <span class="route-dot"></span><span class="route-label">Bauko</span>
-    </button>
+  <div class="hub-filter-wrap">
+    <span class="hub-filter-label">Hub</span>
+    <div class="hub-dropdown" id="hubDropdown">
+      <button type="button" class="hub-dropdown-trigger" id="hubDropdownTrigger" aria-haspopup="listbox" aria-expanded="false">
+        <span class="hub-dropdown-value" id="hubDropdownValue">All Hubs</span>
+        <svg class="hub-dropdown-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="hub-dropdown-menu" id="hubDropdownMenu" role="listbox"></div>
+    </div>
   </div>
 </div>
 
@@ -309,6 +304,9 @@
 
 <!-- Firebase Config (Standard Script) -->
 <script src="firebase-config.js"></script>
+
+<!-- Charts (deferred so it doesn't block rendering) -->
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 
 <!-- Firebase Client (Module Script) -->
 <script type="module" src="firebase-client.js"></script>
