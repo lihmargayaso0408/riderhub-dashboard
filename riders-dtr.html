@@ -1,0 +1,407 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Riders DTR — Time-In Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <!-- PapaParse for Client-Side CSV Parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="firebase-config.js"></script>
+  <script type="module" src="auth.js"></script>
+  <style>
+    body{padding:0;margin:0;}
+    .page-shell{max-width:1280px;margin:0 auto;padding:28px;}
+    .page-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;}
+    .page-head h1{font-family:'Space Grotesk',sans-serif;font-size:24px;margin:0;}
+    .page-head p{margin:4px 0 0;color:var(--text-dim);font-size:13px;}
+    .page-actions{display:flex;align-items:center;gap:10px;}
+    .status-box{background:var(--card);border:1px solid var(--line-2);border-radius:6px;padding:12px 14px;font-size:13px;color:var(--text-dim);}
+    .back-link{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 12px;border-radius:999px;cursor:pointer;font-size:13px;text-decoration:none;transition:background .15s ease,border-color .15s ease;}
+    .back-link:hover{background:var(--hover);}
+    .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}
+    @media (max-width:700px){.stats-row{grid-template-columns:repeat(2,1fr);}}
+    .stat-card{background:var(--card);border:1px solid var(--line-2);border-radius:6px;padding:14px;transition:transform .25s cubic-bezier(.22,.61,.36,1),box-shadow .25s ease,border-color .25s ease;}
+    .stat-card:hover{transform:translateY(-3px);box-shadow:0 10px 22px var(--shadow);border-color:var(--amber);}
+    .stat-label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin-bottom:6px;}
+    .stat-value{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:22px;}
+    .stat-value.teal{color:var(--teal);}
+    .stat-value.brick{color:var(--brick);}
+    .stat-value.amber{color:var(--amber-deep);}
+    .hub-filter{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--card);font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:18px;color:var(--text);cursor:pointer;text-align:center;transition:border-color .2s ease,box-shadow .2s ease;}
+    .hub-filter:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 3px rgba(232,163,61,.15);}
+    .search-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
+    .search-row input{flex:1;min-width:180px;padding:9px 12px;border:1px solid var(--line);border-radius:3px;font-family:'IBM Plex Sans';font-size:13px;background:var(--card);color:var(--text);transition:border-color .2s ease,box-shadow .2s ease;}
+    .search-row input:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 3px rgba(232,163,61,.15);}
+    .search-row select{padding:9px 10px;border:1px solid var(--line);border-radius:3px;font-size:13px;background:var(--card);font-family:'IBM Plex Sans';cursor:pointer;transition:border-color .2s ease,box-shadow .2s ease;}
+    .search-row select:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 3px rgba(232,163,61,.15);}
+    .upload-fab{
+      position:fixed;top:16px;right:16px;z-index:1000;
+      width:56px;height:56px;border:none;border-radius:50%;
+      background:var(--amber);color:var(--ink);
+      display:flex;align-items:center;justify-content:center;
+      cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.25);
+      transition:background .15s ease,transform .15s ease,box-shadow .15s ease;
+    }
+    .upload-fab:hover{background:var(--amber-deep);transform:scale(1.08);box-shadow:0 10px 24px rgba(0,0,0,.3);}
+    .upload-fab:active{transform:scale(.95);}
+    .upload-fab.browse{background:var(--teal);}
+    .upload-fab svg{width:24px;height:24px;}
+    .visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+    .table-card{background:var(--card);border:1px solid var(--line-2);border-radius:8px;padding:16px;overflow:auto;position:relative;}
+    .table-card table{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed;}
+    .table-card thead th{
+      padding:9px 11px;border-bottom:2px solid var(--ink);font-size:11px;
+      text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    }
+    .table-card tbody td{padding:9px 11px;border-bottom:1px solid var(--line-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .table-card tbody tr{transition:background .18s ease,transform .18s ease;}
+    .table-card tbody tr:hover{background:var(--hover);}
+    .text-center{text-align:center;}
+    .time-badge{
+      display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:999px;
+      font-size:12px;font-weight:600;font-family:'IBM Plex Mono',monospace;
+      background:rgba(63,143,109,.1);color:var(--teal);
+    }
+    .parcel-badge{
+      display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:999px;
+      font-size:12px;font-weight:600;font-family:'IBM Plex Mono',monospace;
+      background:rgba(232,163,61,.12);color:var(--amber-deep);
+    }
+    .station-badge{
+      display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:999px;
+      font-size:11px;font-weight:600;background:rgba(91,100,110,.1);color:var(--slate);
+    }
+    .driver-id-badge{
+      display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;
+      font-family:'IBM Plex Mono',monospace;background:var(--hover);color:var(--text);
+    }
+    .phone-link{color:var(--text);text-decoration:none;font-family:'IBM Plex Mono',monospace;}
+    tr.placeholder td{color:var(--text-dim);}
+  </style>
+</head>
+<body>
+  <div class="page-shell">
+    <div class="page-head">
+      <div>
+        <h1>Riders DTR</h1>
+      </div>
+      <div class="page-actions">
+        <a class="back-link" href="index.html">← Back to Rider Performance System</a>
+        <div class="status-box" id="uploadStatus">No file selected</div>
+      </div>
+    </div>
+
+    <!-- Circular Upload FAB (top-right corner) -->
+    <button class="upload-fab" id="uploadFab" type="button" title="Upload daily CSV file" aria-label="Upload daily CSV file">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+    <input type="file" id="csvFileInput" accept=".csv" class="visually-hidden">
+
+    <!-- Stat Cards -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-label">Active Riders</div>
+        <div class="stat-value teal" id="statRiders">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Earliest Start Time</div>
+        <div class="stat-value" id="statEarliest">--:--</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Dispatched Parcels</div>
+        <div class="stat-value amber" id="statParcels">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Hub Filter</div>
+        <select id="hubSelect" class="hub-filter">
+          <option value="ALL">All Hubs</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Filter Controls -->
+    <div class="search-row">
+      <select id="dateSelect" title="Filter by date">
+        <option value="ALL">All Dates</option>
+      </select>
+      <input type="text" id="searchInput" placeholder="Search rider name or ID...">
+    </div>
+
+    <!-- Table -->
+    <div class="table-card">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:3%;">#</th>
+            <th style="width:10%;">Driver ID</th>
+            <th style="width:20%;">Rider Name</th>
+            <th style="width:14%;">Phone Number</th>
+            <th style="width:15%;">Time-In (First Pickup)</th>
+            <th style="width:15%;">Last Pickup</th>
+            <th style="width:8%;" class="text-center">Parcels</th>
+            <th style="width:15%;">Station</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
+          <tr class="placeholder"><td colspan="8">Upload a CSV file to display rider logs.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script type="module">
+    import { doc, setDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const __perms = await window.Auth.guard('dtr');
+    if (!__perms) throw new Error('redirect');
+
+    let globalRawData = [];
+
+    const toastEl = document.getElementById('toast');
+
+    function showToast(html) {
+      toastEl.innerHTML = html;
+      toastEl.classList.add('show');
+      setTimeout(function() { toastEl.classList.remove('show'); }, 3500);
+    }
+
+    function escapeHtml(value) {
+      return String(value || '').replace(/[&<>"']/g, function(m) {
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];
+      });
+    }
+
+    function firebaseEnabled() {
+      return !!(window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.apiKey && window.Auth && window.Auth.db);
+    }
+
+    async function saveDtrData(data) {
+      if (!firebaseEnabled()) {
+        uploadStatusEl.innerHTML = '<span class="muted">Firebase not configured — data shown but not saved.</span>';
+        return false;
+      }
+
+      const groups = {};
+      data.forEach(row => {
+        const hub = row.station || 'Buguias Hub';
+        const gk = hub + '|' + row.date;
+        if (!groups[gk]) groups[gk] = [];
+        groups[gk].push({
+          id: row.id, name: row.name, phone: row.phone, date: row.date,
+          timeIn: row.timeIn, lastPickup: row.lastPickup, parcels: row.parcels, station: row.station
+        });
+      });
+
+      try {
+        const keys = Object.keys(groups);
+        for (const key of keys) {
+          const parts = key.split('|');
+          const hubName = parts[0];
+          const dateStr = parts[1];
+          const hubKey = hubName.replace(/\s+Hub$/, '').replace(/\s+/g, '_');
+          const docId = ('dtr_' + hubKey + '_' + dateStr).replace(/:/g, '_');
+          await setDoc(doc(window.Auth.db, 'dispatch_data', docId), { content: JSON.stringify(groups[key]), updated: new Date().toISOString() });
+        }
+        return true;
+      } catch (err) {
+        console.error('DTR save error:', err);
+        uploadStatusEl.innerHTML = '<span class="error">Save failed: ' + (err && err.message ? err.message : 'unknown error') + '</span>';
+        return false;
+      }
+    }
+
+    const csvFileInput = document.getElementById('csvFileInput');
+    const uploadStatusEl = document.getElementById('uploadStatus');
+    const uploadFab = document.getElementById('uploadFab');
+    const dateSelect = document.getElementById('dateSelect');
+    const searchInput = document.getElementById('searchInput');
+    const tableBody = document.getElementById('tableBody');
+    const statRiders = document.getElementById('statRiders');
+    const statEarliest = document.getElementById('statEarliest');
+    const statParcels = document.getElementById('statParcels');
+    const hubSelect = document.getElementById('hubSelect');
+
+    uploadFab.addEventListener('click', function() {
+      csvFileInput.click();
+    });
+
+    csvFileInput.addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      uploadFab.classList.add('browse');
+      uploadStatusEl.textContent = file.name;
+      uploadStatusEl.title = file.name;
+
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: function(results) { processCSVData(results.data); },
+        error: function(err) {
+          uploadStatusEl.innerHTML = '<span class="error">Error parsing CSV file: ' + err.message + '</span>';
+        }
+      });
+    });
+
+    function processCSVData(rows) {
+      const driverMap = {};
+
+      rows.forEach(row => {
+        const driverName = row['Driver Name'];
+        const pickupTimeStr = row['Pick Up Time'];
+
+        if (!driverName || !pickupTimeStr || driverName.trim() === '') return;
+
+        const driverId = row['Driver ID'] || 'N/A';
+        const rawPhone = row['Driver Phone'] ? String(row['Driver Phone']).trim() : '';
+        const phone = rawPhone ? (rawPhone.startsWith('0') ? rawPhone : '0' + rawPhone) : 'N/A';
+        const station = row['Current Station'] || 'Buguias Hub';
+
+        const dt = new Date(pickupTimeStr);
+        if (isNaN(dt.getTime())) return;
+
+        const dateStr = dt.toISOString().split('T')[0];
+        const key = driverId + '_' + driverName + '_' + dateStr;
+
+        if (!driverMap[key]) {
+          driverMap[key] = {
+            id: driverId, name: driverName, phone: phone, date: dateStr,
+            station: station, minTime: dt, maxTime: dt, parcels: 0
+          };
+        }
+
+        if (dt < driverMap[key].minTime) driverMap[key].minTime = dt;
+        if (dt > driverMap[key].maxTime) driverMap[key].maxTime = dt;
+        driverMap[key].parcels += 1;
+      });
+
+      const processedList = Object.values(driverMap).map(d => ({
+        id: d.id, name: d.name, phone: d.phone, date: d.date,
+        timeIn: d.minTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }),
+        lastPickup: d.maxTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }),
+        parcels: d.parcels, station: d.station, rawTime: d.minTime
+      }));
+
+      processedList.sort((a, b) => new Date(a.rawTime) - new Date(b.rawTime));
+      globalRawData = processedList;
+      populateDateDropdown(processedList);
+      populateHubDropdown(processedList);
+
+      if (processedList.length > 0) {
+        uploadStatusEl.textContent = 'Saving to Firebase…';
+        saveDtrData(processedList).then(function(saved) {
+          if (saved) {
+            uploadStatusEl.textContent = 'Saved ' + processedList.length + ' rider records to Firebase';
+            showToast('Saved <b>' + processedList.length + '</b> rider records to Firebase');
+          } else {
+            uploadStatusEl.innerHTML = '<span class="muted">Firebase not connected — data displayed but not saved.</span>';
+          }
+        });
+      }
+    }
+
+    function populateDateDropdown(data) {
+      dateSelect.innerHTML = '<option value="ALL">All Dates in File</option>';
+      const dates = [...new Set(data.map(item => item.date))].sort().reverse();
+
+      dates.forEach(date => {
+        const opt = document.createElement('option');
+        opt.value = date;
+        opt.textContent = date;
+        dateSelect.appendChild(opt);
+      });
+
+      if (dates.length > 0) dateSelect.value = dates[0];
+      filterAndRender();
+    }
+
+    function populateHubDropdown(data) {
+      hubSelect.innerHTML = '<option value="ALL">All Hubs</option>';
+      const hubs = [...new Set(data.map(item => item.station))].sort();
+
+      hubs.forEach(hub => {
+        const opt = document.createElement('option');
+        opt.value = hub;
+        opt.textContent = hub;
+        hubSelect.appendChild(opt);
+      });
+
+      hubSelect.value = 'ALL';
+      filterAndRender();
+    }
+
+    function filterAndRender() {
+      const selectedDate = dateSelect.value;
+      const selectedHub = hubSelect.value;
+      const searchFilter = searchInput.value.toLowerCase();
+
+      const filtered = globalRawData.filter(item => {
+        const matchesDate = (selectedDate === 'ALL' || item.date === selectedDate);
+        const matchesHub = (selectedHub === 'ALL' || item.station === selectedHub);
+        const matchesSearch = item.name.toLowerCase().includes(searchFilter) || item.id.toLowerCase().includes(searchFilter);
+        return matchesDate && matchesHub && matchesSearch;
+      });
+
+      renderRiderData(filtered);
+    }
+
+    dateSelect.addEventListener('change', filterAndRender);
+    hubSelect.addEventListener('change', filterAndRender);
+    searchInput.addEventListener('keyup', filterAndRender);
+
+    function renderRiderData(data) {
+      tableBody.innerHTML = '';
+      let totalParcels = 0;
+
+      if (data.length === 0) {
+        if (globalRawData.length === 0) {
+          tableBody.innerHTML = '<tr class="placeholder"><td colspan="8">Upload a CSV file to display rider logs.</td></tr>';
+        } else {
+          tableBody.innerHTML = '<tr class="placeholder"><td colspan="8">No records match the selected date or search term.</td></tr>';
+        }
+        statRiders.textContent = '0';
+        statEarliest.textContent = '--:--';
+        statParcels.textContent = '0';
+        return;
+      }
+
+      data.forEach((row, idx) => {
+        totalParcels += row.parcels;
+
+        const tr = document.createElement('tr');
+        const phoneCell = row.phone !== 'N/A'
+          ? '<a href="tel:' + row.phone + '" class="phone-link">' + escapeHtml(row.phone) + '</a>'
+          : '<span class="muted">N/A</span>';
+
+        tr.innerHTML =
+          '<td class="muted" style="font-weight:600;">' + (idx + 1) + '</td>' +
+          '<td><span class="driver-id-badge">' + escapeHtml(row.id) + '</span></td>' +
+          '<td style="font-weight:600;">' + escapeHtml(row.name) + '</td>' +
+          '<td>' + phoneCell + '</td>' +
+          '<td><span class="time-badge">' + escapeHtml(row.timeIn) + '</span></td>' +
+          '<td class="muted">' + escapeHtml(row.lastPickup) + '</td>' +
+          '<td class="text-center"><span class="parcel-badge">' + escapeHtml(row.parcels) + '</span></td>' +
+          '<td><span class="station-badge">' + escapeHtml(row.station) + '</span></td>';
+        tableBody.appendChild(tr);
+      });
+
+      statRiders.textContent = data.length;
+      statEarliest.textContent = data[0].timeIn;
+      statParcels.textContent = totalParcels.toLocaleString();
+    }
+
+    if (typeof window.applySavedTheme === 'function') window.applySavedTheme();
+  </script>
+
+  <!-- Shared Option Button / Options drawer (appears on all pages) -->
+  <script src="options-drawer.js" defer></script>
+
+  <!-- Toast notifications -->
+  <div class="toast" id="toast"></div>
+</body>
+</html>

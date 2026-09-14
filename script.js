@@ -530,6 +530,7 @@ function fmtWeekLabel(d){
       'riders': '#openRidersPageBtn',
       'loss': '#openLossReportBtn',
       'pnr': '#openPnrPageBtn',
+      'dtr': '#openDtrPageBtn',
       'map': '#openAreaMapBtn',
       'accounts': '#openAccountsBtn'
     };
@@ -1908,6 +1909,10 @@ $('#openLossReportBtn').addEventListener('click', ()=>{
     $('#openPnrPageBtn').addEventListener('click', ()=>{
       closeSettingsMenu();
       window.location.href = 'pnr.html';
+    });
+    $('#openDtrPageBtn').addEventListener('click', ()=>{
+      closeSettingsMenu();
+      window.location.href = 'riders-dtr.html';
     });
     $('#openAreaMapBtn').addEventListener('click', ()=>{
       closeSettingsMenu();

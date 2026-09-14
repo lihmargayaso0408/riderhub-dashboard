@@ -66,7 +66,9 @@
     var svgRiders = '<circle cx="9" cy="7" r="4"/><path d="M17 11a4 4 0 0 0 0-8"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M17 13a4 4 0 0 1 4 4v2"/>';
     var svgLoss = '<path d="M12 3v18M8 7l-4 4 4 4M16 7l4 4-4 4"/>';
     var svgPnr = '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h2M8 17h6M12 11h4"/>';
+    var svgDtr = '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v6H8V2"/><path d="M8 10h8M8 14h8M8 18h5"/>';
     var svgMap = '<path d="M9 3 3 6v15l6-3 6 3 6-3V3l-6 3-6-3z"/><path d="M9 3v15M15 6v15"/>';
+    var svgUpload = '<path d="M12 16V4m0 0L7 9m5-5 5 5"/><path d="M4 20h16"/>';
     var svgLogout = '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>';
     var svgTheme = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
     var svgAccounts = '<circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0-3-3.85"/>';
@@ -81,7 +83,9 @@
       + item('optRidersBtn', 'Riders &amp; Agency per hub', svgRiders)
       + item('optLossBtn', 'Loss Report per hub', svgLoss)
       + item('optPnrBtn', 'PNR of Riders', svgPnr)
+      + item('optDtrBtn', 'Riders DTR', svgDtr)
        + item('optAreaBtn', 'Area Map', svgMap)
+       + item('optUploadBtn', 'Upload manifest', svgUpload)
        + item('optAccountsBtn', 'Manage Accounts', svgAccounts)
        + item('optLogoutBtn', 'Log out', svgLogout)
       + '<button class="drawer-item drawer-item-theme" id="optThemeToggle" type="button">'
@@ -207,13 +211,17 @@
     var riders = document.getElementById('optRidersBtn');
     var loss = document.getElementById('optLossBtn');
     var pnr = document.getElementById('optPnrBtn');
+    var dtr = document.getElementById('optDtrBtn');
     var area = document.getElementById('optAreaBtn');
     var logout = document.getElementById('optLogoutBtn');
     if (home) home.addEventListener('click', go('index.html'));
     if (riders) riders.addEventListener('click', go('riders-agency.html'));
     if (loss) loss.addEventListener('click', go('loss-report.html'));
     if (pnr) pnr.addEventListener('click', go('pnr.html'));
+    if (dtr) dtr.addEventListener('click', go('riders-dtr.html'));
     if (area) area.addEventListener('click', go('area-map.html'));
+    var upload = document.getElementById('optUploadBtn');
+    if (upload) upload.addEventListener('click', go('upload.html'));
     var accounts = document.getElementById('optAccountsBtn');
     if (accounts) accounts.addEventListener('click', go('accounts.html'));
     if (logout) logout.addEventListener('click', async function(){
@@ -261,6 +269,7 @@
             'optRidersBtn': 'riders',
             'optLossBtn': 'loss',
             'optPnrBtn': 'pnr',
+            'optDtrBtn': 'dtr',
             'optAreaBtn': 'map',
             'optAccountsBtn': 'accounts'
           };
@@ -271,6 +280,10 @@
             }
           });
         }
+
+        // The Upload manifest page is admin-only.
+        var uploadBtn = document.getElementById('optUploadBtn');
+        if (uploadBtn && !isAdmin) uploadBtn.style.display = 'none';
       } catch(e) {}
     })();
   }
