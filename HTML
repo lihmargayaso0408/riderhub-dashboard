@@ -391,6 +391,8 @@
     ['depreciation','depreciation','num'],
     ['discipline','discipline','num'],
     ['lost rate','lostRate','num'],
+    ['area','area','raw'],
+    ['location','area','raw'],
   ];
   function norm(h){ return String(h||'').replace(/\uFEFF/g,'').trim().toLowerCase().replace(/\s+/g,' '); }
   function toPct(v){ if(v===undefined||v===null) return 0; const n=parseFloat(String(v).replace('%','').trim()); return isNaN(n)?0:n; }
@@ -874,6 +876,7 @@
   const COLUMNS = [
     {key:'name', label:'Rider', type:'name'},
     {key:'hub', label:'Hub', type:'text', showOnlyAll:true},
+    {key:'area', label:'Area', type:'text', showOnlyBuguias:true},
     {key:'vehicleType', label:'Vehicle', type:'text'},
     {key:'driverGroup', label:'Group', type:'text'},
     {key:'attendDays', label:'Days', type:'num'},
@@ -900,7 +903,11 @@
     $('#gradeFilter').addEventListener('change', e=>{ state.filterGrade=e.target.value; renderTable(); });
 
     const thead = $('#theadRow');
-    thead.innerHTML = COLUMNS.filter(c=>!c.showOnlyAll || state.currentHub==='All').map(c=>
+    thead.innerHTML = COLUMNS.filter(c=>{
+      if(c.showOnlyAll && state.currentHub!=='All') return false;
+      if(c.showOnlyBuguias && state.currentHub!=='Buguias') return false;
+      return true;
+    }).map(c=>
       `<th data-key="${c.key}">${c.label}<span class="arrow">${state.sortKey===c.key ? (state.sortDir==='asc'?'▲':'▼') : ''}</span></th>`
     ).join('');
     $$('#theadRow th').forEach(th=>{
@@ -931,7 +938,11 @@
       return 0;
     });
 
-    const cols = COLUMNS.filter(c=>!c.showOnlyAll || state.currentHub==='All');
+    const cols = COLUMNS.filter(c=>{
+      if(c.showOnlyAll && state.currentHub!=='All') return false;
+      if(c.showOnlyBuguias && state.currentHub!=='Buguias') return false;
+      return true;
+    });
     const tbody = $('#tbody');
     tbody.innerHTML = rows.map(r=>{
       return '<tr>' + cols.map(c=>{

@@ -14,9 +14,13 @@ const app = getApps().length ? getApps()[0] : initializeApp(window.FIREBASE_CONF
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-const ALL_HUBS = ['Bauko', 'Buguias', 'Irisan', 'Itogon', 'Itogon Tuding', 'Kapangan', 'La Trinidad Pico', 'MB Atok', 'MB Mankayan'];
+const ALL_HUBS = ['Bauko', 'Buguias', 'Irisan', 'Itogon', 'Itogon Tuding', 'Kapangan', 'La Trinidad Pico', 'MB Atok'];
+const REMOVED_HUBS = ['MB Mankayan'];
+function isHubActive(hub) {
+  return !REMOVED_HUBS.some(removed => removed.toLowerCase() === String(hub || '').trim().toLowerCase());
+}
 function sortHubs(hubs) {
-  return hubs.slice().sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
+  return hubs.filter(isHubActive).slice().sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
 }
 const ALL_ACTIONS = ['upload', 'delete', 'download'];
 const ALL_PAGES = [
@@ -72,7 +76,7 @@ async function ensureProfile(user) {
 }
 
 const Auth = {
-  auth, db, ALL_HUBS, ALL_ACTIONS, ALL_PAGES, ADMIN_EMAILS, sortHubs,
+  auth, db, ALL_HUBS, ALL_ACTIONS, ALL_PAGES, ADMIN_EMAILS, isHubActive, sortHubs,
 
   onAuthChange(cb) { return onAuthStateChanged(auth, cb); },
   currentUser() { return auth.currentUser; },
@@ -141,7 +145,8 @@ const Auth = {
     return s.docs.map(d => ({ uid: d.id, id: d.id, ...d.data() }));
   },
   async setPerms(uid, { hubs, actions, status, pages }) {
-    const data = { hubs, actions, status, updatedAt: serverTimestamp() };
+    const activeHubs = hubs ? hubs.filter(isHubActive) : hubs;
+    const data = { hubs: activeHubs, actions, status, updatedAt: serverTimestamp() };
     if (pages !== undefined) data.pages = pages;
     await updateDoc(doc(db, 'users', uid), data);
   },
@@ -177,7 +182,7 @@ const Auth = {
       const snap = await getDocs(collection(db, 'hubs'));
       const names = snap.docs
         .map(d => (d.data().name || '').trim())
-        .filter(Boolean);
+        .filter(name => name && isHubActive(name));
       if (names.length) {
         const seen = new Set();
         const merged = [];
@@ -200,7 +205,7 @@ const Auth = {
       return onSnapshot(collection(db, 'hubs'), snap => {
         const names = snap.docs
           .map(d => (d.data().name || '').trim())
-          .filter(Boolean);
+          .filter(name => name && isHubActive(name));
         if (!names.length) { cb(ALL_HUBS.slice()); return; }
         const seen = new Set();
         const merged = [];
@@ -220,6 +225,7 @@ const Auth = {
   async addHub(name) {
     const trimmed = String(name || '').trim();
     if (!trimmed) throw new Error('Hub name is required.');
+    if (!isHubActive(trimmed)) throw new Error('This hub is no longer available.');
     // Reject duplicates against the current merged list (case-insensitive).
     const existing = await this.getHubs();
     if (existing.some(h => h.toLowerCase() === trimmed.toLowerCase())) {

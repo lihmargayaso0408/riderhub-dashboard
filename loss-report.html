@@ -68,7 +68,7 @@
     <div class="page-head">
       <div>
         <h1>Loss Report per Hub</h1>
-        <p>Data is loaded from the shared Loss Report spreadsheet and split by hub.</p>
+        <p>Data is loaded from one shared Loss Report sheet and filtered by hub.</p>
       </div>
       <div class="page-actions">
         <a class="back-link" href="index.html">← Back to Rider Performance System</a>
@@ -111,8 +111,18 @@
     const __perms = await window.Auth.guard('loss');
     if (!__perms) throw new Error('redirect');
     const LOSS_SHEET_ID = '1Y-Okr8YoWQx-xbylmUHndT-xVTUtHzDP6cejtTOXzEU';
-    const HUB_SHEET_NAME = { Buguias: 'Buguias', Bauko: 'Bauko', 'MB Atok': 'MB Atok' };
-    const HUB_FALLBACK = ['Bauko','Buguias','Irisan','Itogon','Itogon Tuding','Kapangan','La Trinidad Pico','MB Atok','MB Mankayan'];
+    const LOSS_SHEET_URL = `https://docs.google.com/spreadsheets/d/${LOSS_SHEET_ID}/gviz/tq?tqx=out:csv`;
+    const HUB_FALLBACK = ['Bauko','Buguias','Irisan','Itogon','Itogon Tuding','Kapangan','La Trinidad Pico','MB Atok'];
+    const HUB_NAME_MAP = {
+      bauko: 'Bauko',
+      buguias: 'Buguias',
+      irisan: 'Irisan',
+      itogon: 'Itogon',
+      'itogon tuding': 'Itogon Tuding',
+      kapangan: 'Kapangan',
+      'la trinidad pico': 'La Trinidad Pico',
+      'mb atok': 'MB Atok'
+    };
 
     async function getHubsList(){
       try {
@@ -139,13 +149,13 @@
       tabButtons.length = 0;
       Array.from(container.querySelectorAll('.tab-btn')).forEach(b => tabButtons.push(b));
       tabButtons.forEach(btn => {
-        btn.addEventListener('click', async () => {
+        btn.addEventListener('click', () => {
           if (btn.dataset.hub === currentHub) return;
           currentHub = btn.dataset.hub;
           tabButtons.forEach(b => b.classList.toggle('active', b === btn));
-          statusEl.textContent = 'Loading sheet…';
-          rowsEl.innerHTML = '<tr><td colspan="13" class="muted">Loading...</td></tr>';
-          await loadSheet();
+          populateMonthFilter();
+          renderStats();
+          renderRows();
         });
       });
     }
@@ -159,20 +169,24 @@
     const sortableHeaders = Array.from(document.querySelectorAll('th[data-sort]'));
 
     function applyHubFilter(){
-      const allowed = (__perms && __perms.hubs && __perms.hubs.length) ? __perms.hubs : HUB_FALLBACK;
+      const allowed = (__perms && __perms.hubs && __perms.hubs.length) ? __perms.hubs : hubsList;
       tabButtons.forEach(btn=>{
         const hub = btn.dataset.hub;
-        const ok = allowed.includes(hub) || (hub==='All' && allowed.length>1);
+        const ok = allowed.includes(hub);
         btn.style.display = ok ? '' : 'none';
       });
-      if(!allowed.includes(currentHub)){
-        currentHub = allowed[0] || currentHub;
-        tabButtons.forEach(b=>b.classList.toggle('active', b.dataset.hub===currentHub));
-      }
+      const visibleTabs = tabButtons.filter(btn => btn.style.display !== 'none');
+      const nextHub = allowed.find(hub => visibleTabs.some(btn => btn.dataset.hub === hub))
+        || visibleTabs[0]?.dataset.hub
+        || '';
+      if (currentHub !== nextHub) currentHub = nextHub;
+      tabButtons.forEach(b=>b.classList.toggle('active', b.dataset.hub===currentHub));
     }
 
     let allRows = [];
-    let currentHub = 'Buguias';
+    let hubsList = HUB_FALLBACK.slice();
+    let currentHub = '';
+    let sheetLoadSequence = 0;
     let search = '';
     let selectedMonth = '';
     let selectedStatus = 'NOTSOLVED'; // default filter: Not Solved
@@ -195,7 +209,11 @@
 
     function populateMonthFilter() {
       const months = new Set();
-      allRows.forEach(r => {
+      const currentHubName = normalizeHubName(currentHub);
+      const rowsForFilter = currentHubName
+        ? allRows.filter(r => normalizeHubName(r.hub) === currentHubName)
+        : allRows;
+      rowsForFilter.forEach(r => {
         const key = getMonthKey(r.report_date);
         if (key) months.add(key);
       });
@@ -244,6 +262,26 @@
       return index >= 0 && values[index] !== undefined ? values[index].trim() : '';
     }
 
+    function normalizeHubName(value) {
+      return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/\s+hub\s*$/i, '')
+        .replace(/[-_]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function identifyHub(stationName, hubs) {
+      const normalized = normalizeHubName(stationName);
+      if (!normalized) return '';
+      const matchedHub = (hubs || []).find(hub => normalizeHubName(hub) === normalized);
+      if (matchedHub) return matchedHub;
+      return HUB_NAME_MAP[normalized] && (hubs || []).includes(HUB_NAME_MAP[normalized])
+        ? HUB_NAME_MAP[normalized]
+        : '';
+    }
+
     function cleanNum(value) {
       if (value === undefined || value === null) return 0;
       const n = parseFloat(String(value).replace(/[^\d.\-]/g, ''));
@@ -258,12 +296,13 @@ const USD_TO_PHP = 56.0; // Exchange rate: 1 USD = ₱56 (adjust as needed)
     }
 
     async function loadSheet() {
+      const loadSequence = ++sheetLoadSequence;
       try {
-        const sheetName = HUB_SHEET_NAME[currentHub] || HUB_SHEET_NAME.Buguias;
-        const SHEET_URL = `https://docs.google.com/spreadsheets/d/${LOSS_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
-        const response = await fetch(SHEET_URL);
+        const response = await fetch(LOSS_SHEET_URL);
+        if (loadSequence !== sheetLoadSequence) return;
         if (!response.ok) throw new Error('Unable to fetch sheet');
         const text = await response.text();
+        if (loadSequence !== sheetLoadSequence) return;
         const rawLines = text.split(/\r\n|\n|\r/);
         if (rawLines.length < 2) throw new Error('No rows found in sheet');
 
@@ -301,38 +340,40 @@ const USD_TO_PHP = 56.0; // Exchange rate: 1 USD = ₱56 (adjust as needed)
           total_cogs_usd: findHeaderIndex(normalizedHeaders, ['total_cogs_usd','total cogs','cogs','total']),
           RR_identifier: findHeaderIndex(normalizedHeaders, ['rr_identifier','rr','rr id']),
           sample: findHeaderIndex(normalizedHeaders, ['sample']),
-RTS_identifier: findHeaderIndex(normalizedHeaders, ['rts_identifier','rts','rts id']),
+          RTS_identifier: findHeaderIndex(normalizedHeaders, ['rts_identifier','rts','rts id']),
           Mother_hub_for_MB: findHeaderIndex(normalizedHeaders, ['mother_hub_for_mb','mother hub','mother hub for mb']),
-          status: (function() {
-            const idx = normalizedHeaders.indexOf('status');
-            return idx >= 0 ? idx : findHeaderIndex(normalizedHeaders, ['status']);
-          })()
+          status: normalizedHeaders.indexOf('status')
         };
 
-        allRows = dataRows.map(values => ({
-          report_date: getCell(values, index.report_date),
-          station_name: getCell(values, index.station_name),
-          loss_party: getCell(values, index.loss_party),
-          detailed_status_with_leg: getCell(values, index.detailed_status_with_leg),
-          area_cluster: getCell(values, index.area_cluster),
-          region: getCell(values, index.region),
-          num_loss: cleanNum(getCell(values, index.num_loss)),
-          total_cogs_usd: cleanNum(getCell(values, index.total_cogs_usd)),
-          RR_identifier: getCell(values, index.RR_identifier),
-          sample: getCell(values, index.sample),
-RTS_identifier: getCell(values, index.RTS_identifier),
-          Mother_hub_for_MB: getCell(values, index.Mother_hub_for_MB),
-          status: getCell(values, index.status)
-        })).filter(row => row.report_date || row.loss_party || row.sample || row.num_loss || row.total_cogs_usd);
+        allRows = dataRows.map(values => {
+          const stationName = getCell(values, index.station_name);
+          return {
+            report_date: getCell(values, index.report_date),
+            station_name: stationName,
+            hub: identifyHub(stationName, hubsList),
+            loss_party: getCell(values, index.loss_party),
+            detailed_status_with_leg: getCell(values, index.detailed_status_with_leg),
+            area_cluster: getCell(values, index.area_cluster),
+            region: getCell(values, index.region),
+            num_loss: cleanNum(getCell(values, index.num_loss)),
+            total_cogs_usd: cleanNum(getCell(values, index.total_cogs_usd)),
+            RR_identifier: getCell(values, index.RR_identifier),
+            sample: getCell(values, index.sample),
+            RTS_identifier: getCell(values, index.RTS_identifier),
+            Mother_hub_for_MB: getCell(values, index.Mother_hub_for_MB),
+            status: getCell(values, index.status)
+          };
+        }).filter(row => row.hub && (row.report_date || row.loss_party || row.sample || row.num_loss || row.total_cogs_usd));
 
-populateMonthFilter();
+        populateMonthFilter();
         renderStats();
         renderRows();
-        statusEl.textContent = `Loaded ${allRows.length} loss records`;
+        statusEl.textContent = `Loaded ${allRows.length} loss records from all hubs`;
       } catch (err) {
+        if (loadSequence !== sheetLoadSequence) return;
         console.error(err);
         statusEl.innerHTML = '<span class="error">Could not load the Loss Report spreadsheet. Check the link and try again.</span>';
-rowsEl.innerHTML = '<tr><td colspan="13" class="error">No data available.</td></tr>';
+        rowsEl.innerHTML = '<tr><td colspan="13" class="error">No data available.</td></tr>';
         statsRowEl.innerHTML = '';
       }
     }
@@ -341,8 +382,13 @@ function normalizeStatusVal(status) {
       return String(status || '').trim().toUpperCase().replace(/[^A-Z]/g, '');
     }
 
-function getFilteredRows() {
+    function getFilteredRows() {
+      if (!currentHub) return [];
       let rows = allRows;
+      if (currentHub !== 'All') {
+        const targetHub = normalizeHubName(currentHub);
+        rows = rows.filter(r => normalizeHubName(r.hub) === targetHub);
+      }
       if (selectedMonth) {
         rows = rows.filter(r => getMonthKey(r.report_date) === selectedMonth);
       }
@@ -488,9 +534,9 @@ sortableHeaders.forEach(th => {
       });
     });
 
-    // Build hub tabs dynamically, then apply access control and load data.
     (async function start(){
       const hubs = await getHubsList();
+      hubsList = hubs;
       buildHubTabs(hubs);
       applyHubFilter();
       loadSheet();
@@ -499,8 +545,10 @@ sortableHeaders.forEach(th => {
       if (window.Auth && typeof window.Auth.onHubsChange === 'function') {
         try {
           window.Auth.onHubsChange(newHubs => {
+            hubsList = newHubs;
             buildHubTabs(newHubs);
             applyHubFilter();
+            loadSheet();
           });
         } catch (e) { /* ignore */ }
       }

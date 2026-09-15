@@ -113,10 +113,14 @@
   /* ---------------- Storage helpers ---------------- */
   // Hubs are now loaded dynamically from Firestore (see Auth.getHubs()).
   // The hardcoded list is retained as a fallback when Firebase is unavailable.
-  const HUB_FALLBACK = ['Bauko','Buguias','Irisan','Itogon','Itogon Tuding','Kapangan','La Trinidad Pico','MB Atok','MB Mankayan'];
+  const HUB_FALLBACK = ['Bauko','Buguias','Irisan','Itogon','Itogon Tuding','Kapangan','La Trinidad Pico','MB Atok'];
+  const REMOVED_HUBS = ['MB Mankayan'];
 
+  function isHubActive(hub) {
+    return !REMOVED_HUBS.some(removed => removed.toLowerCase() === String(hub || '').trim().toLowerCase());
+  }
   function sortHubs(hubs) {
-    return hubs.slice().sort((a,b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
+    return hubs.filter(isHubActive).slice().sort((a,b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
   }
 
   // Resolve the current hub list: prefer state.hubs (loaded from Firestore),
@@ -1252,7 +1256,7 @@ const entries = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
     {key:'name', label:'Rider', type:'name'},
     {key:'hub', label:'Hub', type:'text', showOnlyAll:true},
     {key:'vehicleType', label:'Vehicle', type:'text'},
-    {key:'area', label:'Area', type:'text'},
+    {key:'area', label:'Area', type:'text', onlyHubs:['Buguias','Bauko']},
     {key:'driverGroup', label:'Group', type:'text'},
     {key:'attendDays', label:'Days', type:'num'},
     {key:'avgParcelsPerDay', label:'Parcels/Day', type:'num1'},
@@ -1282,7 +1286,10 @@ const entries = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
   }
 
   function visibleColumns(){
-    return COLUMNS.filter(c => !c.showOnlyAll || state.currentHub === 'All');
+    return COLUMNS.filter(c => {
+      if (c.onlyHubs && !c.onlyHubs.includes(state.currentHub)) return false;
+      return !c.showOnlyAll || state.currentHub === 'All';
+    });
   }
 
   function renderThead(){

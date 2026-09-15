@@ -375,7 +375,9 @@
 
     function populateHubDropdown(data) {
       hubSelect.innerHTML = '<option value="ALL">All Hubs</option>';
-      const hubs = [...new Set(data.map(item => item.station))].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
+      const hubs = [...new Set(data.map(item => item.station))]
+        .filter(hub => String(hub || '').trim().toLowerCase() !== 'mb mankayan')
+        .sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
 
       hubs.forEach(hub => {
         const opt = document.createElement('option');
