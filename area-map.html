@@ -176,9 +176,6 @@
 
     <div class="tabs" id="hubTabs">
       <button class="tab-btn active" data-hub="All" type="button">All Hubs</button>
-      <button class="tab-btn" data-hub="Buguias" type="button">Buguias</button>
-      <button class="tab-btn" data-hub="MB Atok" type="button">MB Atok</button>
-      <button class="tab-btn" data-hub="Bauko" type="button">Bauko</button>
     </div>
 
     <div class="map-toolbar">
@@ -189,10 +186,7 @@
     </div>
       <button type="button" id="resetMapBtn" class="toolbar-btn">Reset Map</button>
       <button type="button" id="placeRiderBtn" class="toolbar-btn admin-only" style="display:none;">Place Rider</button>
-      <div class="legend">
-        <span><span class="dot" style="background:var(--teal)"></span>Buguias</span>
-        <span><span class="dot" style="background:var(--amber-deep)"></span>MB Atok</span>
-        <span><span class="dot" style="background:var(--brick)"></span>Bauko</span>
+      <div class="legend" id="legend">
         <span class="note" id="legendNote">Admin: click Place Rider, enter coordinates or click the map.</span>
       </div>
     </div>
@@ -230,19 +224,82 @@
     if (!__perms) throw new Error('redirect');
     const SHEET_ID = '1aGJXuO3tz5oLJyL6piEljz4A6cg6l0cnKvmtIpLkqMI';
     const HUB_SHEET_NAME = { Buguias: 'Buguias', Bauko: 'Bauko', 'MB Atok': 'MB Atok' };
-    const HUBS = ['Buguias', 'MB Atok', 'Bauko'];
+    const HUB_FALLBACK = ['Bauko', 'Buguias', 'Irisan', 'Itogon', 'Itogon Tuding', 'Kapangan', 'La Trinidad Pico', 'MB Atok', 'MB Mankayan'];
+    // Default color palette for hubs without an explicit color entry.
+    const HUB_COLOR_PALETTE = ['#3F8F6D', '#C97F1E', '#C1503F', '#8FAE4E', '#5B8FB9', '#9B5DE5', '#E07A5F', '#2D9CDB'];
     const HUB_COLOR = {
       'Buguias': '#3F8F6D',
       'MB Atok': '#C97F1E',
       'Bauko': '#C1503F',
       'MB Mankayan': '#8FAE4E'
     };
+    // Default center for hubs without an explicit center entry.
+    const HUB_CENTER_DEFAULT = [16.78, 120.80];
     const HUB_CENTER = {
       'Buguias': [16.6833, 120.8333],
       'MB Atok': [16.5833, 120.7500],
       'Bauko': [16.9833, 120.8667],
       'MB Mankayan': [16.8670, 120.7833]
     };
+
+    // Resolve a hub's color from the map, falling back to the palette.
+    function hubColor(hub){
+      if (HUB_COLOR[hub]) return HUB_COLOR[hub];
+      // Deterministic assignment based on hub name so the same hub always
+      // gets the same color across sessions.
+      let h = 0;
+      for (let i = 0; i < hub.length; i++) h = (h * 31 + hub.charCodeAt(i)) >>> 0;
+      return HUB_COLOR_PALETTE[h % HUB_COLOR_PALETTE.length];
+    }
+
+    // Resolve a hub's center, falling back to the shared default.
+    function hubCenter(hub){
+      return HUB_CENTER[hub] || HUB_CENTER_DEFAULT;
+    }
+
+    // Build the hub tab buttons dynamically from the Firestore hub list.
+    async function getHubsList(){
+      try {
+        if (window.Auth && typeof window.Auth.getHubs === 'function') {
+          const hubs = await window.Auth.getHubs();
+          if (hubs && hubs.length) return hubs;
+        }
+      } catch (e) { /* fall through */ }
+      return HUB_FALLBACK.slice();
+    }
+
+    function buildHubTabs(hubs){
+      const container = document.getElementById('hubTabs');
+      if (!container) return;
+      container.innerHTML = '';
+      // Always include "All Hubs" first.
+      const allBtn = document.createElement('button');
+      allBtn.type = 'button';
+      allBtn.className = 'tab-btn active';
+      allBtn.dataset.hub = 'All';
+      allBtn.textContent = 'All Hubs';
+      container.appendChild(allBtn);
+      (hubs || []).forEach(hub => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'tab-btn';
+        btn.dataset.hub = hub;
+        btn.textContent = hub;
+        container.appendChild(btn);
+      });
+      tabButtons.length = 0;
+      Array.from(container.querySelectorAll('.tab-btn')).forEach(b => tabButtons.push(b));
+      tabButtons.forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (btn.dataset.hub === currentHub) return;
+          currentHub = btn.dataset.hub;
+          tabButtons.forEach(b => b.classList.toggle('active', b === btn));
+          statusEl.textContent = 'Updating map…';
+          await renderMap();
+          renderPlacedRiders();
+        });
+      });
+    }
 
     const MUNICIPALITY_COORDS = {
       'mankayan': [16.8670, 120.7833],
@@ -280,7 +337,7 @@
     const layerToggle = document.getElementById('layerToggle');
 
     function applyHubFilter(){
-      const allowed = (__perms && __perms.hubs && __perms.hubs.length) ? __perms.hubs : ['Buguias','MB Atok','Bauko'];
+      const allowed = (__perms && __perms.hubs && __perms.hubs.length) ? __perms.hubs : HUB_FALLBACK;
       tabButtons.forEach(btn=>{
         const hub = btn.dataset.hub;
         const ok = allowed.includes(hub) || (hub==='All' && allowed.length>1);
@@ -294,6 +351,13 @@
 
     let allRows = [];
     let currentHub = 'All';
+    let hubsList = HUB_FALLBACK.slice(); // populated from Firestore after load
+
+    // Resolve the current hub list (dynamic Firestore list if loaded, else fallback).
+    function currentHubs(){
+      return (hubsList && hubsList.length) ? hubsList : HUB_FALLBACK;
+    }
+
     let map = null;
     let simpleLayer = null;
     let streetLayer = null;
@@ -312,7 +376,8 @@
     // Load performance snapshots from Firestore to build success rate lookup
     async function loadPerformanceData() {
       if (!window.firebaseAPI || !window.firebaseAPI.isEnabled || !window.firebaseAPI.isEnabled()) return;
-      for (const hub of HUBS) {
+      const hubs = currentHubs();
+      for (const hub of hubs) {
         try {
           // Get summary to find latest date
           const summaryRaw = await window.firebaseAPI.get(`summary:${hub}`, false);
@@ -448,7 +513,8 @@
     async function loadAllSheets() {
       allRows = [];
       let loaded = 0;
-      for (const hub of HUBS) {
+      const hubs = currentHubs();
+      for (const hub of hubs) {
         try {
           const rows = await loadHubSheet(hub);
           allRows = allRows.concat(rows);
@@ -495,7 +561,7 @@
     }
 
     function createRiderIcon(rider) {
-      const color = HUB_COLOR[rider.hub] || '#5B6472';
+      const color = hubColor(rider.hub);
       return L.divIcon({
         className: 'rider-marker-wrapper',
         html: `<div class="rider-marker-icon" style="background:${color};"></div>`,
@@ -683,8 +749,8 @@
       document.querySelectorAll('.rider-card').forEach(c => c.classList.remove('rider-card-selected'));
       if (cardEl) cardEl.classList.add('rider-card-selected');
       updateConfirmButton();
-      if (map && rider.hub && HUB_CENTER[rider.hub]) {
-        map.flyTo(HUB_CENTER[rider.hub], 12, { duration: 0.8 });
+      if (map && rider.hub && hubCenter(rider.hub)) {
+        map.flyTo(hubCenter(rider.hub), 12, { duration: 0.8 });
       }
     }
 
@@ -946,11 +1012,16 @@
 
     if (typeof window.applySavedTheme === 'function') window.applySavedTheme();
 
+    // Build hub tabs dynamically, then load data.
     (async function start() {
       try {
+        // Load the dynamic hub list first so tabs reflect all available hubs.
+        hubsList = await getHubsList();
+        buildHubTabs(hubsList);
+        applyHubFilter();
+
         const n = await loadAllSheets();
         if (!n) throw new Error('No rows');
-        applyHubFilter();
         await loadPerformanceData();
         initMap();
         placedRiders = await loadPlacedRiders();
@@ -959,11 +1030,37 @@
         renderPlacedRiders();
         await renderMap();
         if (placeRiderBtn) placeRiderBtn.disabled = false;
+
+        // Build the legend from the current hub list.
+        buildLegend();
       } catch (err) {
         console.error(err);
         statusEl.innerHTML = '<span class="error">Could not load the Riders sheet. Check the link and try again.</span>';
       }
+
+      // Subscribe to hub changes so new hubs appear in real-time.
+      if (window.Auth && typeof window.Auth.onHubsChange === 'function') {
+        try {
+          window.Auth.onHubsChange(newHubs => {
+            hubsList = newHubs;
+            buildHubTabs(newHubs);
+            applyHubFilter();
+            buildLegend();
+          });
+        } catch (e) { /* ignore */ }
+      }
     })();
+
+    // Build the legend from the current hub list.
+    function buildLegend(){
+      const legend = document.getElementById('legend');
+      if (!legend) return;
+      const hubs = currentHubs();
+      legend.innerHTML = hubs.map(h => {
+        const c = hubColor(h);
+        return `<span><span class="dot" style="background:${c}"></span>${escapeHtml(h)}</span>`;
+      }).join('') + `<span class="note" id="legendNote">Admin: click Place Rider, enter coordinates or click the map.</span>`;
+    }
 
     setInterval(async function(){
       if(document.hidden) return;
@@ -983,9 +1080,6 @@
       }
     }, 30000);
   </script>
-
-  <!-- Shared hub navigation / selector sync (appears on all pages) -->
-  <script src="nav-sync.js" defer></script>
 
   <!-- Shared Option Button / Options drawer (appears on all pages) -->
   <script src="options-drawer.js" defer></script>

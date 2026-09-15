@@ -79,9 +79,15 @@
       throw new Error('not admin');
     }
     const Auth = window.Auth;
-    const ALL_HUBS = Auth.ALL_HUBS;
     const ALL_ACTIONS = Auth.ALL_ACTIONS;
     const ALL_PAGES = Auth.ALL_PAGES;
+
+    // Dynamic hub list (Firestore + fallback). Loaded once at startup.
+    let ALL_HUBS = (Auth.ALL_HUBS || []).slice();
+    try {
+      const dynamicHubs = await Auth.getHubs();
+      if (dynamicHubs && dynamicHubs.length) ALL_HUBS = dynamicHubs;
+    } catch (e) { /* keep fallback */ }
 
     if (typeof window.applySavedTheme === 'function') window.applySavedTheme();
 
@@ -231,9 +237,6 @@
     searchEl.addEventListener('input', applySearch);
     loadAccounts();
   </script>
-
-  <!-- Shared hub navigation / selector sync (appears on all pages) -->
-  <script src="nav-sync.js" defer></script>
 
   <!-- Shared Option Button / Options drawer (appears on all pages) -->
   <script src="options-drawer.js" defer></script>

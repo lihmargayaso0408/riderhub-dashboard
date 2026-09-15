@@ -155,7 +155,7 @@
   </div>
 
   <script type="module">
-    import { doc, setDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { doc, setDoc, getDocs, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const __perms = await window.Auth.guard('dtr');
     if (!__perms) throw new Error('redirect');
@@ -199,19 +199,68 @@
 
       try {
         const keys = Object.keys(groups);
+        console.log('DTR SAVE: saving', keys.length, 'groups');
         for (const key of keys) {
           const parts = key.split('|');
           const hubName = parts[0];
           const dateStr = parts[1];
           const hubKey = hubName.replace(/\s+Hub$/, '').replace(/\s+/g, '_');
           const docId = ('dtr_' + hubKey + '_' + dateStr).replace(/:/g, '_');
-          await setDoc(doc(window.Auth.db, 'dispatch_data', docId), { content: JSON.stringify(groups[key]), updated: new Date().toISOString() });
+          const groupData = groups[key];
+          console.log('DTR SAVE: docId:', docId, 'rows:', groupData.length, 'first row:', JSON.stringify(groupData[0]));
+          await setDoc(doc(window.Auth.db, 'dispatch_data', docId), { content: JSON.stringify(groupData), updated: new Date().toISOString() });
         }
         return true;
       } catch (err) {
         console.error('DTR save error:', err);
         uploadStatusEl.innerHTML = '<span class="error">Save failed: ' + (err && err.message ? err.message : 'unknown error') + '</span>';
         return false;
+      }
+    }
+
+    async function loadDtrData() {
+      if (!firebaseEnabled()) {
+        console.log('DTR LOAD: firebaseEnabled() returned false');
+        return;
+      }
+      console.log('DTR LOAD: starting...');
+      try {
+        const snapshot = await getDocs(collection(window.Auth.db, 'dispatch_data'));
+        console.log('DTR LOAD: got snapshot with', snapshot.size, 'docs');
+        const allRows = [];
+        snapshot.forEach(docSnap => {
+          const data = docSnap.data();
+          console.log('DTR LOAD: doc', docSnap.id, 'has content:', !!(data && data.content));
+          if (!data || !data.content) return;
+          try {
+            const parsed = JSON.parse(data.content);
+            console.log('DTR LOAD: parsed type:', Array.isArray(parsed) ? 'array' : typeof parsed, 'length:', Array.isArray(parsed) ? parsed.length : 'N/A');
+            if (Array.isArray(parsed)) {
+              parsed.forEach(row => allRows.push(row));
+            } else if (parsed && typeof parsed === 'object') {
+              Object.values(parsed).forEach(group => {
+                if (Array.isArray(group)) group.forEach(row => allRows.push(row));
+              });
+            }
+          } catch (e) {
+            console.warn('DTR LOAD: Failed to parse DTR doc:', docSnap.id, e);
+          }
+        });
+
+        console.log('DTR LOAD: total rows loaded:', allRows.length);
+        if (allRows.length > 0) {
+          console.log('DTR LOAD: first row sample:', JSON.stringify(allRows[0]));
+          allRows.sort((a, b) => new Date(a.rawTime || a.date) - new Date(b.rawTime || b.date));
+          globalRawData = allRows;
+          populateDateDropdown(allRows);
+          populateHubDropdown(allRows);
+          filterAndRender();
+          uploadStatusEl.textContent = 'Loaded ' + allRows.length + ' rider records from Firebase';
+        } else {
+          console.log('DTR LOAD: no rows found, globalRawData stays empty');
+        }
+      } catch (err) {
+        console.error('DTR LOAD error:', err);
       }
     }
 
@@ -248,7 +297,11 @@
       });
     });
 
+    // Load previously saved DTR data from Firebase on page load.
+    loadDtrData();
+
     function processCSVData(rows) {
+      console.log('DTR PROCESS: received', rows.length, 'rows');
       const driverMap = {};
 
       rows.forEach(row => {
@@ -322,7 +375,7 @@
 
     function populateHubDropdown(data) {
       hubSelect.innerHTML = '<option value="ALL">All Hubs</option>';
-      const hubs = [...new Set(data.map(item => item.station))].sort();
+      const hubs = [...new Set(data.map(item => item.station))].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
 
       hubs.forEach(hub => {
         const opt = document.createElement('option');

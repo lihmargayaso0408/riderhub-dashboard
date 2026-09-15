@@ -75,11 +75,7 @@
         <div class="status-box" id="sheetStatus">Loading sheet…</div>
       </div>
     </div>
-    <div class="tabs" id="hubTabs">
-      <button class="tab-btn active" data-hub="Buguias" type="button">Buguias</button>
-      <button class="tab-btn" data-hub="MB Atok" type="button">MB Atok</button>
-      <button class="tab-btn" data-hub="Bauko" type="button">Bauko</button>
-    </div>
+    <div class="tabs" id="hubTabs"></div>
     <div class="stats-row" id="statsRow"></div>
 <div class="search-row">
       <input type="text" id="searchInput" placeholder="Search report date, loss party, status, sample, area cluster…">
@@ -111,22 +107,59 @@
     </div>
   </div>
 
-  <script type="module">
+<script type="module">
     const __perms = await window.Auth.guard('loss');
     if (!__perms) throw new Error('redirect');
     const LOSS_SHEET_ID = '1Y-Okr8YoWQx-xbylmUHndT-xVTUtHzDP6cejtTOXzEU';
     const HUB_SHEET_NAME = { Buguias: 'Buguias', Bauko: 'Bauko', 'MB Atok': 'MB Atok' };
+    const HUB_FALLBACK = ['Bauko','Buguias','Irisan','Itogon','Itogon Tuding','Kapangan','La Trinidad Pico','MB Atok','MB Mankayan'];
+
+    async function getHubsList(){
+      try {
+        if (window.Auth && typeof window.Auth.getHubs === 'function') {
+          const hubs = await window.Auth.getHubs();
+          if (hubs && hubs.length) return hubs;
+        }
+      } catch (e) { /* fall through */ }
+      return HUB_FALLBACK.slice();
+    }
+
+    function buildHubTabs(hubs){
+      const container = document.getElementById('hubTabs');
+      if (!container) return;
+      container.innerHTML = '';
+      (hubs || []).forEach(hub => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'tab-btn';
+        btn.dataset.hub = hub;
+        btn.textContent = hub;
+        container.appendChild(btn);
+      });
+      tabButtons.length = 0;
+      Array.from(container.querySelectorAll('.tab-btn')).forEach(b => tabButtons.push(b));
+      tabButtons.forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (btn.dataset.hub === currentHub) return;
+          currentHub = btn.dataset.hub;
+          tabButtons.forEach(b => b.classList.toggle('active', b === btn));
+          statusEl.textContent = 'Loading sheet…';
+          rowsEl.innerHTML = '<tr><td colspan="13" class="muted">Loading...</td></tr>';
+          await loadSheet();
+        });
+      });
+    }
 
     const statusEl = document.getElementById('sheetStatus');
     const rowsEl = document.getElementById('lossRows');
     const statsRowEl = document.getElementById('statsRow');
-const searchEl = document.getElementById('searchInput');
+    const searchEl = document.getElementById('searchInput');
     const monthFilterEl = document.getElementById('monthFilter');
-    const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
+    const tabButtons = [];
     const sortableHeaders = Array.from(document.querySelectorAll('th[data-sort]'));
 
     function applyHubFilter(){
-      const allowed = (__perms && __perms.hubs && __perms.hubs.length) ? __perms.hubs : ['Buguias','MB Atok','Bauko'];
+      const allowed = (__perms && __perms.hubs && __perms.hubs.length) ? __perms.hubs : HUB_FALLBACK;
       tabButtons.forEach(btn=>{
         const hub = btn.dataset.hub;
         const ok = allowed.includes(hub) || (hub==='All' && allowed.length>1);
@@ -446,7 +479,7 @@ String(r.RTS_identifier || '').toLowerCase().includes(q) ||
       renderRows();
     });
 
-    sortableHeaders.forEach(th => {
+sortableHeaders.forEach(th => {
       th.addEventListener('click', () => {
         const key = th.dataset.sort;
         if (sortKey === key) { sortDir = sortDir === 'asc' ? 'desc' : 'asc'; }
@@ -455,19 +488,23 @@ String(r.RTS_identifier || '').toLowerCase().includes(q) ||
       });
     });
 
-    tabButtons.forEach(btn => {
-      btn.addEventListener('click', async () => {
-        if (btn.dataset.hub === currentHub) return;
-        currentHub = btn.dataset.hub;
-        tabButtons.forEach(b => b.classList.toggle('active', b === btn));
-        statusEl.textContent = 'Loading sheet…';
-rowsEl.innerHTML = '<tr><td colspan="13" class="muted">Loading...</td></tr>';
-        await loadSheet();
-      });
-    });
+    // Build hub tabs dynamically, then apply access control and load data.
+    (async function start(){
+      const hubs = await getHubsList();
+      buildHubTabs(hubs);
+      applyHubFilter();
+      loadSheet();
 
-    applyHubFilter();
-    loadSheet();
+      // Subscribe to hub changes so new hubs appear in real-time.
+      if (window.Auth && typeof window.Auth.onHubsChange === 'function') {
+        try {
+          window.Auth.onHubsChange(newHubs => {
+            buildHubTabs(newHubs);
+            applyHubFilter();
+          });
+        } catch (e) { /* ignore */ }
+      }
+    })();
 
     setInterval(async function(){
       if(document.hidden) return;

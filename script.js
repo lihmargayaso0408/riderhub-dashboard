@@ -111,7 +111,33 @@
   }
 
   /* ---------------- Storage helpers ---------------- */
-  const HUBS = ['Bauko','MB Atok','Buguias'];
+  // Hubs are now loaded dynamically from Firestore (see Auth.getHubs()).
+  // The hardcoded list is retained as a fallback when Firebase is unavailable.
+  const HUB_FALLBACK = ['Bauko','Buguias','Irisan','Itogon','Itogon Tuding','Kapangan','La Trinidad Pico','MB Atok','MB Mankayan'];
+
+  function sortHubs(hubs) {
+    return hubs.slice().sort((a,b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
+  }
+
+  // Resolve the current hub list: prefer state.hubs (loaded from Firestore),
+  // fall back to the hardcoded list when not yet loaded.
+  function currentHubs(){
+    return (state.hubs && state.hubs.length) ? sortHubs(state.hubs) : sortHubs(HUB_FALLBACK);
+  }
+
+  // Load the hub list from Auth (Firestore + fallback merge). Safe to call
+  // multiple times; updates state.hubs and triggers a UI refresh if needed.
+  async function loadHubs(){
+    try {
+      const hubs = await window.Auth.getHubs();
+      const changed = JSON.stringify(hubs) !== JSON.stringify(state.hubs);
+      state.hubs = sortHubs(hubs);
+      return changed;
+    } catch(e) {
+      state.hubs = sortHubs(HUB_FALLBACK);
+      return false;
+    }
+  }
 
   const hasFirebaseStorage = !!(window.firebaseAPI && window.firebaseAPI.isEnabled && window.firebaseAPI.isEnabled());
 
@@ -139,8 +165,8 @@
   };
 
   async function getIndex(){
-    try{ const r = await storage.get('hubs-index', false); return r? JSON.parse(r.value) : {Bauko:[],'MB Atok':[],Buguias:[]}; }
-    catch(e){ return {Bauko:[],'MB Atok':[],Buguias:[]}; }
+    try{ const r = await storage.get('hubs-index', false); return r? JSON.parse(r.value) : Object.fromEntries(HUB_FALLBACK.map(h => [h, []])); }
+    catch(e){ return Object.fromEntries(HUB_FALLBACK.map(h => [h, []])); }
   }
   async function saveIndex(idx){ await storage.set('hubs-index', JSON.stringify(idx), false); }
   async function saveSnapshot(hub,date,rows){
@@ -170,12 +196,15 @@
     return lines.join('\r\n');
   }
 
-  function getExportDates(hub){
-    if(hub === 'All'){
-      return Array.from(new Set([...(state.hubIndex.Bauko||[]), ...(state.hubIndex['MB Atok']||[]), ...(state.hubIndex.Buguias||[])])).sort();
-    }
-    return (state.hubIndex[hub]||[]).slice().sort();
-  }
+function getExportDates(hub){
+     if(hub === 'All'){
+       const hubs = currentHubs();
+       const set = new Set();
+       hubs.forEach(h => { (state.hubIndex[h]||[]).forEach(d => set.add(d)); });
+       return Array.from(set).sort();
+     }
+     return (state.hubIndex[hub]||[]).slice().sort();
+   }
 
   function populateDownloadWeekOptions(){
     const hub = $('#downloadHubSelect').value;
@@ -201,7 +230,7 @@
 
   async function buildDownloadRows(hub, date){
     const exportRows = [];
-    const hubs = hub === 'All' ? HUBS : [hub];
+    const hubs = hub === 'All' ? currentHubs() : [hub];
     for(const hubName of hubs){
       const snap = await loadSnapshot(hubName, date);
       if(!snap || !snap.rows) continue;
@@ -293,12 +322,13 @@
   }
 
   const state = {
-    hubIndex: {Bauko:[],'MB Atok':[],Buguias:[]},
+    hubs: null, // loaded from Firestore (Auth.getHubs); null => not yet loaded
+    hubIndex: Object.fromEntries(HUB_FALLBACK.map(h => [h, []])),
     currentHub: 'All',
     currentDate: null,
     frequency: 'weekly',
     rows: [],
-    summaries: {Bauko:[],'MB Atok':[],Buguias:[]},
+    summaries: Object.fromEntries(HUB_FALLBACK.map(h => [h, []])),
     sortKey: 'deliverySuccessRate',
     sortDir: 'desc',
     search: '',
@@ -343,6 +373,16 @@ function fmtWeekLabel(d){
       if(!perms) return; // redirected to login
       state.perms = perms;
 
+      // Seed hubs collection on first run (best-effort, non-blocking).
+      if (window.Auth && typeof window.Auth.seedHubsIfEmpty === 'function') {
+        window.Auth.seedHubsIfEmpty().catch(()=>{});
+      }
+
+      // Load the dynamic hub list (Firestore + fallback). This populates
+      // state.hubs and is used by applyAccessControl() to build the dropdown.
+      await loadHubs();
+      populateHubSelects();
+
       const currentUser = window.Auth.currentUser();
       if(!currentUser){
         showToast('Session expired. Please sign in again.');
@@ -364,9 +404,9 @@ function fmtWeekLabel(d){
       const theme = await loadTheme();
       applyTheme(theme);
       state.hubIndex = await getIndex();
-      state.summaries.Bauko = await getSummary('Bauko');
-      state.summaries['MB Atok'] = await getSummary('MB Atok');
-      state.summaries.Buguias = await getSummary('Buguias');
+      for (const hub of HUB_FALLBACK) {
+        state.summaries[hub] = await getSummary(hub);
+      }
       areaLookup = await buildAreaLookup();
       pnrLookup = await buildPnrLookup();
       applyAccessControl(perms);
@@ -374,6 +414,9 @@ function fmtWeekLabel(d){
       wireStaticEvents();
       if(perms.role === 'admin') refreshAccessBadge();
       startAutoRefresh();
+
+      // Wire the New Hub modal (admin-only).
+      wireNewHubModal(perms);
     } catch(err) {
       console.error('Dashboard init failed:', err);
       $('#content').innerHTML = '<div class="empty"><h3>Failed to load dashboard</h3><p>' + (err && err.message ? err.message : 'Unknown error') + '</p><p>Check the browser console (F12) for details.</p></div>';
@@ -383,8 +426,24 @@ function fmtWeekLabel(d){
   let autoRefreshUnsub = null;
   let pollTimer = null;
   let isRefreshing = false;
+  let hubUnsub = null;
 
   function startAutoRefresh(){
+    // Subscribe to hub list changes so new hubs appear in real-time.
+    if (window.Auth && typeof window.Auth.onHubsChange === 'function') {
+      try {
+        hubUnsub = window.Auth.onHubsChange(hubs => {
+          const changed = JSON.stringify(hubs) !== JSON.stringify(state.hubs);
+          if (changed) {
+      state.hubs = sortHubs(hubs);
+            populateHubSelects();
+            applyAccessControl(state.perms);
+            refreshView();
+          }
+        });
+      } catch (e) { /* ignore */ }
+    }
+
     if(hasFirebaseStorage && window.firebaseAPI && typeof window.firebaseAPI.subscribe === 'function'){
       autoRefreshUnsub = window.firebaseAPI.subscribe(async function(changedKeys){
         const relevant = changedKeys.some(function(k){ return k.startsWith('snapshot:') || k === 'hubs-index' || k.startsWith('summary:'); });
@@ -392,9 +451,12 @@ function fmtWeekLabel(d){
         try {
           isRefreshing = true;
           state.hubIndex = await getIndex();
-          state.summaries.Bauko = await getSummary('Bauko');
-          state.summaries['MB Atok'] = await getSummary('MB Atok');
-          state.summaries.Buguias = await getSummary('Buguias');
+          const hubs = currentHubs();
+          hubs.forEach(h => { state.summaries[h] = (state.summaries[h]||[]); });
+          // Refresh summaries for all known hubs
+          for (const h of hubs) {
+            state.summaries[h] = await getSummary(h);
+          }
           await refreshView();
           showToast('Dashboard updated automatically');
         } catch(e) {
@@ -413,9 +475,10 @@ function fmtWeekLabel(d){
         if(idxChanged){
           isRefreshing = true;
           state.hubIndex = newIndex;
-          state.summaries.Bauko = await getSummary('Bauko');
-          state.summaries['MB Atok'] = await getSummary('MB Atok');
-          state.summaries.Buguias = await getSummary('Buguias');
+          const hubs = currentHubs();
+          for (const h of hubs) {
+            state.summaries[h] = await getSummary(h);
+          }
           await refreshView();
           showToast('Dashboard updated automatically');
         }
@@ -430,6 +493,7 @@ function fmtWeekLabel(d){
   function stopAutoRefresh(){
     if(autoRefreshUnsub){ autoRefreshUnsub(); autoRefreshUnsub = null; }
     if(pollTimer){ clearInterval(pollTimer); pollTimer = null; }
+    if(hubUnsub){ hubUnsub(); hubUnsub = null; }
   }
 
   window.addEventListener('beforeunload', stopAutoRefresh);
@@ -459,8 +523,9 @@ function fmtWeekLabel(d){
     if(trigger) trigger.setAttribute('aria-expanded', 'false');
   }
 
-  function allowedHubs(){
-    return (state.perms && state.perms.hubs && state.perms.hubs.length) ? state.perms.hubs : HUBS;
+function allowedHubs(){
+    const hubs = (state.perms && state.perms.hubs && state.perms.hubs.length) ? state.perms.hubs : currentHubs();
+    return sortHubs(hubs);
   }
 
   function allDatesForCurrentHub(){
@@ -540,7 +605,7 @@ function fmtWeekLabel(d){
       if(b) b.style.display = pages.indexOf(key) === -1 ? 'none' : '';
     });
 
-    // Admin-only: Access Requests + Manage Accounts entries.
+    // Admin-only: Access Requests + Manage Accounts + New Hub entries.
     if(perms.role==='admin'){
       const ab = $('#openAccessBtn'); if(ab) ab.style.display='';
       setupAccessRequests();
@@ -548,6 +613,11 @@ function fmtWeekLabel(d){
       if(mb){
         mb.style.display='';
         mb.addEventListener('click', ()=>{ closeSettingsMenu(); window.location.href='accounts.html'; });
+      }
+      const nh = $('#openNewHubBtn');
+      if(nh){
+        nh.style.display='';
+        nh.addEventListener('click', ()=>{ closeSettingsMenu(); openNewHubModal(); });
       }
     }
   }
@@ -637,6 +707,106 @@ function fmtWeekLabel(d){
     });
     $('#closeAccess').addEventListener('click', ()=> overlay.classList.remove('show'));
     overlay.addEventListener('click', e=>{ if(e.target.id==='accessOverlay') overlay.classList.remove('show'); });
+  }
+
+  // ---- New Hub modal (admin-only) ----
+  function openNewHubModal(){
+    const overlay = $('#newHubOverlay');
+    const input = $('#newHubNameInput');
+    const msg = $('#newHubModalMsg');
+    const saveBtn = $('#saveNewHub');
+    if(!overlay) return;
+    input.value = '';
+    msg.textContent = '';
+    msg.className = 'modal-msg';
+    saveBtn.disabled = true;
+    overlay.classList.add('show');
+    setTimeout(()=>input.focus(), 50);
+  }
+  function closeNewHubModal(){
+    $('#newHubOverlay').classList.remove('show');
+  }
+  function wireNewHubModal(perms){
+    const overlay = $('#newHubOverlay');
+    const input = $('#newHubNameInput');
+    const msg = $('#newHubModalMsg');
+    const saveBtn = $('#saveNewHub');
+    if(!overlay) return;
+
+    const validate = ()=>{
+      const v = (input.value || '').trim();
+      const existing = currentHubs();
+      let ok = v.length > 0;
+      let err = '';
+      if(!ok) err = 'Enter a hub name.';
+      else if (existing.some(h => h.toLowerCase() === v.toLowerCase())) err = 'A hub named "' + v + '" already exists.';
+      msg.textContent = err;
+      msg.className = err ? 'modal-msg err' : 'modal-msg';
+      saveBtn.disabled = !ok || !!err;
+    };
+    input.addEventListener('input', validate);
+
+    $('#cancelNewHub').addEventListener('click', closeNewHubModal);
+    overlay.addEventListener('click', e=>{ if(e.target.id==='newHubOverlay') closeNewHubModal(); });
+
+    saveBtn.addEventListener('click', async ()=>{
+      const name = (input.value || '').trim();
+      if(!name) return;
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+      msg.textContent = '';
+      try {
+        if (window.Auth && typeof window.Auth.addHub === 'function') {
+          await window.Auth.addHub(name);
+        } else {
+          throw new Error('Auth.addHub is not available.');
+        }
+        // Refresh the hub list and rebuild UI.
+        await loadHubs();
+        populateHubSelects();
+        applyAccessControl(state.perms);
+        closeNewHubModal();
+        showToast('Added hub <b>' + escapeHtml(name) + '</b>. Grant it to accounts via Manage Accounts.');
+      } catch(e) {
+        msg.textContent = 'Could not add hub: ' + (e && e.message ? e.message : 'unknown error');
+        msg.className = 'modal-msg err';
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save';
+      }
+    });
+  }
+
+  // Repopulate the upload/download hub <select> elements from the dynamic list.
+  function populateHubSelects(){
+    const hubs = sortHubs(currentHubs());
+    const uploadSel = $('#hubSelect');
+    if(uploadSel){
+      const prev = uploadSel.value;
+      uploadSel.innerHTML = '';
+      hubs.forEach(h => {
+        const o = document.createElement('option');
+        o.value = h; o.textContent = h;
+        uploadSel.appendChild(o);
+      });
+      if(prev && hubs.includes(prev)) uploadSel.value = prev;
+      else if(hubs.length) uploadSel.value = hubs[0];
+    }
+    const dlSel = $('#downloadHubSelect');
+    if(dlSel){
+      const prev = dlSel.value;
+      dlSel.innerHTML = '';
+      hubs.forEach(h => {
+        const o = document.createElement('option');
+        o.value = h; o.textContent = h;
+        dlSel.appendChild(o);
+      });
+      const allO = document.createElement('option');
+      allO.value = 'All'; allO.textContent = 'Both hubs';
+      dlSel.appendChild(allO);
+      if(prev && (hubs.includes(prev) || prev==='All')) dlSel.value = prev;
+      else dlSel.value = 'All';
+    }
   }
 
   let calendarYear = null;
@@ -797,12 +967,13 @@ function fmtWeekLabel(d){
     updateLastUpdatedNote();
   }
 
-  function updateLastUpdatedNote(){
-    const all = [...(state.hubIndex.Bauko||[]), ...(state.hubIndex['MB Atok']||[]), ...(state.hubIndex.Buguias||[])];
-    if(all.length===0){ $('#lastUpdatedNote').textContent = 'No manifests uploaded yet.'; return; }
-    const latest = all.sort().slice(-1)[0];
-    $('#lastUpdatedNote').textContent = `Latest manifest on file: ${fmtDate(latest)}`;
-  }
+function updateLastUpdatedNote(){
+     const hubs = currentHubs();
+     const all = hubs.flatMap(h => (state.hubIndex[h]||[]));
+     if(all.length===0){ $('#lastUpdatedNote').textContent = 'No manifests uploaded yet.'; return; }
+     const latest = all.sort().slice(-1)[0];
+     $('#lastUpdatedNote').textContent = `Latest manifest on file: ${fmtDate(latest)}`;
+   }
 
   function renderEmpty(){
     const hubName = state.currentHub==='All' ? 'either hub' : state.currentHub;
@@ -1246,19 +1417,22 @@ cells.forEach((day, index)=>{
     selectionText.textContent = input.value ? `Selected date: ${fmtDate(input.value)}` : 'Selected date: —';
   }
 
-  function openModal(){
-    $('#overlay').classList.add('show');
-    $('#modalMsg').textContent = '';
-    $('#dropText').innerHTML = '<b>Click to choose</b> or drag a .csv file here';
-    pendingFile = null; pendingParsedRows = null;
-    $('#confirmUpload').disabled = true;
-     const today = new Date();
-     if(!$('#dateInput').value){ $('#dateInput').value = toISODate(today); }
-     state.weekPickerSelectedDate = toISODate(today);
-     state.weekPickerMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    renderWeekPicker();
-    if(state.currentHub==='Bauko' || state.currentHub==='MB Atok' || state.currentHub==='Buguias') $('#hubSelect').value = state.currentHub;
-  }
+function openModal(){
+     $('#overlay').classList.add('show');
+     $('#modalMsg').textContent = '';
+     $('#dropText').innerHTML = '<b>Click to choose</b> or drag a .csv file here';
+     pendingFile = null; pendingParsedRows = null;
+     $('#confirmUpload').disabled = true;
+      const today = new Date();
+      if(!$('#dateInput').value){ $('#dateInput').value = toISODate(today); }
+      state.weekPickerSelectedDate = toISODate(today);
+      state.weekPickerMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+     renderWeekPicker();
+     // Default to the current hub if it's a known hub, else the first hub.
+     const hubs = currentHubs();
+     if(hubs.includes(state.currentHub)) $('#hubSelect').value = state.currentHub;
+     else if(hubs.length) $('#hubSelect').value = hubs[0];
+   }
   function closeModal(){ $('#overlay').classList.remove('show'); }
 
   function handleFile(file){
@@ -1380,8 +1554,8 @@ cells.forEach((day, index)=>{
         targetDates = allDatesForCurrentHub().filter(d => toISODate(startOfWeek(d)) === wk);
       }
 
-     const deleteSet = new Set(targetDates);
-     const hubsToDelete = (state.currentHub === 'All' ? HUBS : [state.currentHub]).filter(hub => {
+const deleteSet = new Set(targetDates);
+      const hubsToDelete = (state.currentHub === 'All' ? currentHubs() : [state.currentHub]).filter(hub => {
        const hd = state.hubIndex[hub] || [];
        return hd.some(d => deleteSet.has(d));
      });
@@ -1423,22 +1597,26 @@ cells.forEach((day, index)=>{
      }
    }
 
-  async function resetAll(){
-    if(!confirm('Clear all stored manifests for both hubs? This cannot be undone.')) return;
-    for(const hub of HUBS){
-      const dates = state.hubIndex[hub]||[];
-      for(const d of dates){
-        try{ await storage.delete(`snapshot:${hub}:${d}`, false); }catch(e){}
-      }
-      try{ await storage.delete(`summary:${hub}`, false); }catch(e){}
-    }
-    try{ await storage.delete('hubs-index', false); }catch(e){}
-    state.hubIndex = {Bauko:[],'MB Atok':[],Buguias:[]};
-    state.summaries = {Bauko:[],'MB Atok':[],Buguias:[]};
-    state.currentDate = null;
-    await refreshView();
-    showToast('All stored data cleared.');
-  }
+async function resetAll(){
+     if(!confirm('Clear all stored manifests for all hubs? This cannot be undone.')) return;
+     const hubs = currentHubs();
+     for(const hub of hubs){
+       const dates = state.hubIndex[hub]||[];
+       for(const d of dates){
+         try{ await storage.delete(`snapshot:${hub}:${d}`, false); }catch(e){}
+       }
+       try{ await storage.delete(`summary:${hub}`, false); }catch(e){}
+     }
+     try{ await storage.delete('hubs-index', false); }catch(e){}
+     const freshIndex = {};
+     const freshSummaries = {};
+     hubs.forEach(h => { freshIndex[h] = []; freshSummaries[h] = []; });
+     state.hubIndex = freshIndex;
+     state.summaries = freshSummaries;
+     state.currentDate = null;
+     await refreshView();
+     showToast('All stored data cleared.');
+   }
 
 /* ---------------- Riders & Agency modal (single page) ---------------- */
 const RIDERS_SHEET_ID = '1aGJXuO3tz5oLJyL6piEljz4A6cg6l0cnKvmtIpLkqMI';
@@ -1461,11 +1639,12 @@ const riders = {
   // Lookup of rider name+hub+week -> not-solved PNR count, built from the PNR Google Sheet
   let notSolvedPnrMap = new Map();
 
-  async function buildAreaLookup(){
-    const map = new Map();
-    for(const hub of HUBS){
-      try{
-        const sheetName = RIDERS_HUB_SHEET[hub] || hub;
+async function buildAreaLookup(){
+     const map = new Map();
+     const hubs = currentHubs();
+     for(const hub of hubs){
+       try{
+         const sheetName = RIDERS_HUB_SHEET[hub] || hub;
         const url = `https://docs.google.com/spreadsheets/d/${RIDERS_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
         const response = await fetch(url);
         if(!response.ok) continue;

@@ -128,15 +128,6 @@ a{color:inherit;}
   font-weight:700;font-size:26px;margin:0;letter-spacing:-.01em;
 }
 .brand-sub{color:#9AA3AF;font-size:13px;margin-top:4px;}
-.upload-btn{
-  background:var(--amber);color:var(--ink);border:none;
-  font-family:'IBM Plex Sans',sans-serif;font-weight:600;font-size:14px;
-  padding:11px 18px;border-radius:3px;cursor:pointer;
-  display:flex;align-items:center;gap:8px;
-  transition:background .15s ease;
-}
-.upload-btn:hover{background:#F0B45C;}
-.upload-btn svg{width:16px;height:16px;}
 .theme-btn{
   background:rgba(255,255,255,.06);color:#F5F6F1;border:1px solid #3A4150;
   width:40px;height:40px;border-radius:3px;cursor:pointer;
