@@ -82,6 +82,23 @@
     }
     .phone-link{color:var(--text);text-decoration:none;font-family:'IBM Plex Mono',monospace;}
     tr.placeholder td{color:var(--text-dim);}
+    .top-riders-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;}
+    @media (max-width:700px){.top-riders-row{grid-template-columns:1fr;}}
+    .top-riders-box{background:var(--card);border:1px solid var(--line-2);border-radius:8px;padding:14px;}
+    .top-riders-box .box-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;}
+    .top-riders-box .box-title{font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;}
+    .top-riders-box .box-target{font-size:11px;color:var(--text-dim);}
+    .top-riders-box .rider-list{list-style:none;margin:0;padding:0;}
+    .top-riders-box .rider-list li{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line-2);font-size:12.5px;}
+    .top-riders-box .rider-list li:last-child{border-bottom:none;}
+    .top-riders-box .rider-rank{width:22px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-dim);text-align:right;}
+    .top-riders-box .rider-name{flex:1;font-weight:600;color:var(--text);}
+    .top-riders-box .rider-id{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-dim);background:var(--hover);padding:1px 6px;border-radius:4px;}
+    .top-riders-box .rider-time{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;border-radius:999px;padding:2px 8px;}
+    .rider-time.early{background:rgba(63,143,109,.12);color:var(--teal);}
+    .rider-time.target{background:rgba(232,163,61,.12);color:var(--amber-deep);}
+    .rider-time.late{background:rgba(232,113,106,.12);color:var(--brick);}
+    .top-riders-box .empty{color:var(--text-dim);font-size:12px;text-align:center;padding:8px 0;}
   </style>
 </head>
 <body>
@@ -122,6 +139,28 @@
           <option value="ALL">All Hubs</option>
         </select>
       </div>
+     </div>
+
+    <!-- Top 5 Early & Late Riders Boxes -->
+    <div class="top-riders-row">
+      <div class="top-riders-box">
+        <div class="box-head">
+          <span class="box-title">Top 5 Early Riders</span>
+          <span class="box-target">Target: 5:00 AM</span>
+        </div>
+        <ul class="rider-list" id="earlyRidersList">
+          <li class="empty">No data yet</li>
+        </ul>
+      </div>
+      <div class="top-riders-box">
+        <div class="box-head">
+          <span class="box-title">Top 5 Late Riders</span>
+          <span class="box-target">Target: 6:00 AM</span>
+        </div>
+        <ul class="rider-list" id="lateRidersList">
+          <li class="empty">No data yet</li>
+        </ul>
+      </div>
     </div>
 
     <!-- Filter Controls -->
@@ -155,7 +194,7 @@
   </div>
 
   <script type="module">
-    import { doc, setDoc, getDocs, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { doc, setDoc, getDoc, getDocs, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const __perms = await window.Auth.guard('dtr');
     if (!__perms) throw new Error('redirect');
@@ -178,6 +217,35 @@
 
     function firebaseEnabled() {
       return !!(window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.apiKey && window.Auth && window.Auth.db);
+    }
+
+    function mergeRiderData(existing, incoming) {
+      const byKey = {};
+      existing.forEach(function(row) {
+        if (!row || !row.id || !row.name || !row.date) return;
+        const key = [row.id, row.name, row.date].join('|');
+        byKey[key] = row;
+      });
+      incoming.forEach(function(row) {
+        if (!row || !row.id || !row.name || !row.date) return;
+        const key = [row.id, row.name, row.date].join('|');
+        byKey[key] = row;
+      });
+      const merged = Object.values(byKey);
+      merged.sort(function(a, b) { return new Date(a.rawTime || a.date) - new Date(b.rawTime || b.date); });
+      return merged;
+    }
+
+    function timeInToMinutes(row) {
+      if (row.rawTime && row.rawTime instanceof Date) return row.rawTime.getHours() * 60 + row.rawTime.getMinutes();
+      const match = (row.timeIn || '').match(/(\d+):(\d+):(\d+)\s*(AM|PM)/i);
+      if (!match) return Infinity;
+      let hours = parseInt(match[1]);
+      const minutes = parseInt(match[2]);
+      const ampm = match[4].toUpperCase();
+      if (ampm === 'PM' && hours !== 12) hours += 12;
+      if (ampm === 'AM' && hours === 12) hours = 0;
+      return hours * 60 + minutes;
     }
 
     async function saveDtrData(data) {
@@ -207,8 +275,29 @@
           const hubKey = hubName.replace(/\s+Hub$/, '').replace(/\s+/g, '_');
           const docId = ('dtr_' + hubKey + '_' + dateStr).replace(/:/g, '_');
           const groupData = groups[key];
-          console.log('DTR SAVE: docId:', docId, 'rows:', groupData.length, 'first row:', JSON.stringify(groupData[0]));
-          await setDoc(doc(window.Auth.db, 'dispatch_data', docId), { content: JSON.stringify(groupData), updated: new Date().toISOString() });
+
+          const docRef = doc(window.Auth.db, 'dispatch_data', docId);
+          let mergedData = groupData;
+
+          try {
+            const existingSnap = await getDoc(docRef);
+            if (existingSnap.exists()) {
+              const existingContent = existingSnap.data().content;
+              try {
+                const existingData = JSON.parse(existingContent);
+                if (Array.isArray(existingData)) {
+                  mergedData = mergeRiderData(existingData, groupData);
+                }
+              } catch (parseErr) {
+                console.warn('DTR SAVE: Failed to parse existing content for', docId, parseErr);
+              }
+            }
+          } catch (readErr) {
+            console.warn('DTR SAVE: Failed to read existing doc for', docId, readErr);
+          }
+
+          console.log('DTR SAVE: docId:', docId, 'existing+new merged rows:', mergedData.length);
+          await setDoc(docRef, { content: JSON.stringify(mergedData), updated: new Date().toISOString() }, { merge: true });
         }
         return true;
       } catch (err) {
@@ -229,6 +318,7 @@
         console.log('DTR LOAD: got snapshot with', snapshot.size, 'docs');
         const allRows = [];
         snapshot.forEach(docSnap => {
+          if (!docSnap.id.startsWith('dtr_')) return;
           const data = docSnap.data();
           console.log('DTR LOAD: doc', docSnap.id, 'has content:', !!(data && data.content));
           if (!data || !data.content) return;
@@ -274,6 +364,8 @@
     const statEarliest = document.getElementById('statEarliest');
     const statParcels = document.getElementById('statParcels');
     const hubSelect = document.getElementById('hubSelect');
+    const earlyRidersList = document.getElementById('earlyRidersList');
+    const lateRidersList = document.getElementById('lateRidersList');
 
     uploadFab.addEventListener('click', function() {
       csvFileInput.click();
@@ -341,16 +433,16 @@
       }));
 
       processedList.sort((a, b) => new Date(a.rawTime) - new Date(b.rawTime));
-      globalRawData = processedList;
-      populateDateDropdown(processedList);
-      populateHubDropdown(processedList);
+      globalRawData = mergeRiderData(globalRawData, processedList);
+      populateDateDropdown(globalRawData);
+      populateHubDropdown(globalRawData);
 
       if (processedList.length > 0) {
         uploadStatusEl.textContent = 'Saving to Firebase…';
         saveDtrData(processedList).then(function(saved) {
           if (saved) {
-            uploadStatusEl.textContent = 'Saved ' + processedList.length + ' rider records to Firebase';
-            showToast('Saved <b>' + processedList.length + '</b> rider records to Firebase');
+            uploadStatusEl.textContent = 'Saved ' + processedList.length + ' new rider records (' + globalRawData.length + ' total) to Firebase';
+            showToast('Saved <b>' + processedList.length + '</b> new rider records to Firebase');
           } else {
             uploadStatusEl.innerHTML = '<span class="muted">Firebase not connected — data displayed but not saved.</span>';
           }
@@ -359,7 +451,7 @@
     }
 
     function populateDateDropdown(data) {
-      dateSelect.innerHTML = '<option value="ALL">All Dates in File</option>';
+      dateSelect.innerHTML = '<option value="ALL">All Dates</option>';
       const dates = [...new Set(data.map(item => item.date))].sort().reverse();
 
       dates.forEach(date => {
@@ -396,13 +488,59 @@
       const searchFilter = searchInput.value.toLowerCase();
 
       const filtered = globalRawData.filter(item => {
+        if (!item || !item.date || !item.station) return false;
         const matchesDate = (selectedDate === 'ALL' || item.date === selectedDate);
         const matchesHub = (selectedHub === 'ALL' || item.station === selectedHub);
-        const matchesSearch = item.name.toLowerCase().includes(searchFilter) || item.id.toLowerCase().includes(searchFilter);
+        const matchesSearch = (item.name || '').toLowerCase().includes(searchFilter) || (item.id || '').toLowerCase().includes(searchFilter);
         return matchesDate && matchesHub && matchesSearch;
       });
 
       renderRiderData(filtered);
+      renderTopRiders(filtered);
+    }
+
+    function renderTopRiders(data) {
+      const sortable = data.filter(item => timeInToMinutes(item) < Infinity).map(function(item) {
+        return Object.assign({}, item, { _mins: timeInToMinutes(item) });
+      });
+
+      const sortedAsc = sortable.slice().sort(function(a, b) { return a._mins - b._mins; });
+      const sortedDesc = sortable.slice().sort(function(a, b) { return b._mins - a._mins; });
+      const topEarly = sortedAsc.slice(0, 5);
+      const topLate = sortedDesc.slice(0, 5);
+
+      function timeClass(mins) {
+        if (mins < 300) return 'early';
+        if (mins < 360) return 'target';
+        return 'late';
+      }
+
+      function formatTime(mins) {
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        const ampm = h < 12 ? 'AM' : 'PM';
+        const hr = h % 12 === 0 ? 12 : h % 12;
+        return hr + ':' + String(m).padStart(2, '0') + ' ' + ampm;
+      }
+
+      function renderList(items) {
+        if (items.length === 0) {
+          return '<li class="empty">No data yet</li>';
+        }
+        return items.map(function(item, idx) {
+          var mins = timeInToMinutes(item);
+          var cls = timeClass(mins);
+          return '<li>' +
+            '<span class="rider-rank">' + (idx + 1) + '</span>' +
+            '<span class="rider-name">' + escapeHtml(item.name) + '</span>' +
+            '<span class="rider-id">' + escapeHtml(item.id) + '</span>' +
+            '<span class="rider-time ' + cls + '">' + formatTime(mins) + '</span>' +
+            '</li>';
+        }).join('');
+      }
+
+      earlyRidersList.innerHTML = renderList(topEarly);
+      lateRidersList.innerHTML = renderList(topLate);
     }
 
     dateSelect.addEventListener('change', filterAndRender);
