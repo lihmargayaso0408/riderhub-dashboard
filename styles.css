@@ -319,7 +319,7 @@ body.dark .kpi::after{background:linear-gradient(120deg,transparent 30%,rgba(255
 .panel:hover{transform:translateY(-3px);box-shadow:0 12px 28px var(--shadow);border-color:var(--amber);}
 .panel h3{font-family:'Space Grotesk',sans-serif;font-size:14px;margin:0 0 4px 0;}
 .panel p.hint{font-size:12px;color:var(--text-dim);margin:0 0 14px 0;}
-/* Clickable panel — signals it navigates (e.g. Not Solved PNR) */
+/* Clickable panel — signals it navigates (e.g. Lost of Hub) */
 .panel.clickable-panel{cursor:pointer;}
 .panel.clickable-panel .panel-arrow{
   display:inline-block;margin-left:6px;color:var(--amber-deep);font-size:13px;
@@ -329,28 +329,6 @@ body.dark .panel.clickable-panel .panel-arrow{color:var(--amber);}
 .panel.clickable-panel:hover .panel-arrow{transform:translateX(5px);}
 .panel.clickable-panel:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
 .trend-disabled{padding:40px 10px;text-align:center;color:var(--text-dim);font-size:13px;}
-
-/* Not Solved PNR */
-#notSolvedWrap{display:flex;flex-direction:column;gap:8px;}
-.ns-row{
-  display:flex;align-items:center;gap:12px;
-  background:var(--card);border:1px solid var(--line-2);border-radius:8px;
-  border-left:4px solid var(--brick);
-  padding:12px 14px;cursor:pointer;
-  animation:fadeUp .5s cubic-bezier(.22,.61,.36,1) both;
-  transition:transform .25s cubic-bezier(.22,.61,.36,1), box-shadow .25s ease, border-color .25s ease;
-  will-change:transform;
-}
-.ns-row:hover{transform:translateY(-2px);box-shadow:0 10px 22px var(--shadow);border-color:var(--brick);}
-.ns-row:active{transform:scale(.98);}
-.ns-name{flex:1;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.ns-count{
-  flex-shrink:0;font-size:14px;font-weight:700;color:var(--brick);
-  font-family:'IBM Plex Mono',monospace;
-  background:rgba(193,80,63,.1);padding:4px 12px;border-radius:999px;
-  transition:transform .2s ease, background .2s ease;
-}
-.ns-row:hover .ns-count{transform:scale(1.12);background:rgba(193,80,63,.18);}
 
 /* trend panel */
 .trend-panel{margin-bottom:22px;}

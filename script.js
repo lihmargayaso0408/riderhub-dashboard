@@ -349,6 +349,9 @@ function getExportDates(hub){
 
   function fmtPct(n){ return (n||0).toFixed(1)+'%'; }
   function fmtNum(n){ return Math.round(n||0).toLocaleString(); }
+  function normalizeHubName(value) {
+    return String(value || '').trim().toLowerCase().replace(/\s+hub\s*$/i, '').replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+  }
   function fmtDate(d){
     if(!d) return '—';
     const dt = new Date(d+'T00:00:00');
@@ -1029,7 +1032,6 @@ function animateCountUp(el, target, isPct){
 
 html += '<div class="panels">';
     html += `<div class="panel"><h3>Vehicle types</h3><p class="hint">Rider count by vehicle type</p><div id="trendWrap"></div></div>`;
-    html += `<div class="panel clickable-panel" id="notSolvedPanel" role="link" tabindex="0" title="Open PNR of Riders"><h3>Not Solved PNR <span class="panel-arrow">→</span></h3><p class="hint">Riders with not-solved PNR across all hubs</p><div id="notSolvedWrap"></div></div>`;
     html += '</div>';
 
 html += '<div class="strip">';
@@ -1061,29 +1063,10 @@ html += '<div class="strip">';
     });
 
 await renderTrend();
-    renderNotSolved();
     renderTopBottom(rows);
     setupTableControls(rows);
     renderTable();
     wireTableDrag();
-
-    // Clicking the "Not Solved PNR" panel opens the PNR of Riders page.
-    const nsPanel = $('#notSolvedPanel');
-    if(nsPanel){
-      const hasPnrAccess = (state.perms && state.perms.pages && state.perms.pages.indexOf('pnr') !== -1);
-      if(hasPnrAccess){
-        const goToPnr = ()=> window.location.href = 'pnr.html';
-        nsPanel.addEventListener('click', goToPnr);
-        nsPanel.addEventListener('keydown', e=>{
-          if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); goToPnr(); }
-        });
-      } else {
-        nsPanel.classList.remove('clickable-panel');
-        nsPanel.removeAttribute('role');
-        nsPanel.removeAttribute('tabindex');
-        nsPanel.title = 'No access to PNR of Riders';
-      }
-    }
   }
 
   /* ---- Sideways drag-to-scroll control for the dashboard table ---- */
@@ -1177,64 +1160,6 @@ await renderTrend();
         }).join('')}
       </div>
     `;
-  }
-
-async function renderNotSolved(){
-    const wrap = $('#notSolvedWrap');
-    if(!wrap) return;
-    const hasPnrAccess = (state.perms && state.perms.pages && state.perms.pages.indexOf('pnr') !== -1);
-    if(!hasPnrAccess){
-      wrap.innerHTML = '<div class="trend-disabled">NO ACCESS</div>';
-      return;
-    }
-    wrap.innerHTML = '<div class="trend-disabled">Loading PNR data…</div>';
-    try{
-      const url = `https://docs.google.com/spreadsheets/d/${PNR_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(PNR_SHEET_NAME)}`;
-      const response = await fetch(url);
-      if(!response.ok) throw new Error('fetch');
-      const text = await response.text();
-      const parsedLines = text.split(/\r\n|\n|\r/).map(parseSheetCsvLine);
-      const headerRowIndex = parsedLines.findIndex(values => {
-        const normalized = values.map(v => String(v||'').trim().toLowerCase());
-        return normalized.some(h=>['date'].includes(h))
-          && normalized.some(h=>['hub'].includes(h))
-          && normalized.some(h=>['rider','rider name','driver','name'].includes(h));
-      });
-      if(headerRowIndex < 0) throw new Error('no header');
-      const normalizedHeaders = parsedLines[headerRowIndex].map(h => String(h||'').trim().toLowerCase());
-      const nameIdx = findSheetHeaderIndex(normalizedHeaders, ['rider','rider name','driver','name']);
-      const statusIdx = findSheetHeaderIndex(normalizedHeaders, ['status']);
-      const countIdx = findSheetHeaderIndex(normalizedHeaders, ['count']);
-      const counts = {};
-      for(let i=headerRowIndex+1;i<parsedLines.length;i++){
-        const values = parsedLines[i];
-        if(!values.some(c => String(c||'').trim() !== '')) continue;
-        const name = String(values[nameIdx]||'').trim();
-        const st = statusIdx>=0 ? String(values[statusIdx]||'').trim().toUpperCase().replace(/[^A-Z]/g,'') : '';
-        if(!name || st !== 'NOTSOLVED') continue;
-        const cnt = countIdx>=0 ? (parseFloat(String(values[countIdx]||'').replace(/[^\d.\-]/g,''))||0) : 0;
-        counts[name] = (counts[name]||0) + cnt;
-      }
-const entries = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
-      if(entries.length === 0){
-        wrap.innerHTML = '<div class="trend-disabled">No not-solved PNR for the selected snapshot.</div>';
-        return;
-      }
-      const max = entries[0][1] || 1;
-      wrap.innerHTML = entries.map(([name,cnt], idx) => `
-        <div class="ns-row" style="animation-delay:${Math.min(idx*60,600)}ms">
-          <span class="ns-name">${escapeHtml(name)}</span>
-          <span class="ns-count mono" data-count="${cnt}">0</span>
-        </div>
-      `).join('');
-      // Animate each count up to its final value for a fluid, lively feel.
-      $$('#notSolvedWrap .ns-count').forEach(el=>{
-        const target = el.getAttribute('data-count');
-        animateCountUp(el, fmtNum(target), false);
-      });
-    }catch(e){
-      wrap.innerHTML = '<div class="trend-disabled">Could not load PNR data — check the sheet link and try again.</div>';
-    }
   }
 
   function renderTopBottom(rows){
@@ -1629,6 +1554,8 @@ async function resetAll(){
 const RIDERS_SHEET_ID = '1aGJXuO3tz5oLJyL6piEljz4A6cg6l0cnKvmtIpLkqMI';
   const PNR_SHEET_ID = '1aGJXuO3tz5oLJyL6piEljz4A6cg6l0cnKvmtIpLkqMI';
   const PNR_SHEET_NAME = 'PNR';
+  const LOSS_SHEET_ID = '1Y-Okr8YoWQx-xbylmUHndT-xVTUtHzDP6cejtTOXzEU';
+  const LOSS_SHEET_URL = `https://docs.google.com/spreadsheets/d/${LOSS_SHEET_ID}/gviz/tq?tqx=out:csv`;
   const RIDERS_HUB_SHEET = { Buguias:'Buguias', Bauko:'Bauko', 'MB Atok':'MB Atok' };
 const riders = {
     allRows: [],
