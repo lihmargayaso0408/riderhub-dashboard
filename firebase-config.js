@@ -5,8 +5,8 @@ const firebaseConfig = {
   projectId: "dashboard-3ef3e",
   storageBucket: "dashboard-3ef3e.firebasestorage.app",
   messagingSenderId: "915179409949",
-  appId: "1:915179409949:web:3927f37398ab00465aacf4"
-  // measurementId removed — triggers CORB when loaded from file://
+  appId: "1:915179409949:web:3927f37398ab00465aacf4",
+  measurementId: "G-CRJ384EEX3"
 };
 
 window.FIREBASE_CONFIG = firebaseConfig;

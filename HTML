@@ -4,11 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dispatch Board — Rider &amp; Hub Performance</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="preconnect" href="https://cdnjs.cloudflare.com">
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
   :root{
     --ink:#14181F;
     --ink-2:#1E2430;
@@ -391,8 +390,6 @@
     ['depreciation','depreciation','num'],
     ['discipline','discipline','num'],
     ['lost rate','lostRate','num'],
-    ['area','area','raw'],
-    ['location','area','raw'],
   ];
   function norm(h){ return String(h||'').replace(/\uFEFF/g,'').trim().toLowerCase().replace(/\s+/g,' '); }
   function toPct(v){ if(v===undefined||v===null) return 0; const n=parseFloat(String(v).replace('%','').trim()); return isNaN(n)?0:n; }
@@ -707,7 +704,7 @@
     state.rows = rows;
 
     $('#viewSub').textContent = state.currentHub==='All'
-      ? 'Record from last week'
+      ? 'Combined snapshot — each hub shown as of its latest upload'
       : `Snapshot for ${fmtDate(state.currentDate)}`;
 
     renderContent();
@@ -876,7 +873,6 @@
   const COLUMNS = [
     {key:'name', label:'Rider', type:'name'},
     {key:'hub', label:'Hub', type:'text', showOnlyAll:true},
-    {key:'area', label:'Area', type:'text', showOnlyBuguias:true},
     {key:'vehicleType', label:'Vehicle', type:'text'},
     {key:'driverGroup', label:'Group', type:'text'},
     {key:'attendDays', label:'Days', type:'num'},
@@ -903,11 +899,7 @@
     $('#gradeFilter').addEventListener('change', e=>{ state.filterGrade=e.target.value; renderTable(); });
 
     const thead = $('#theadRow');
-    thead.innerHTML = COLUMNS.filter(c=>{
-      if(c.showOnlyAll && state.currentHub!=='All') return false;
-      if(c.showOnlyBuguias && state.currentHub!=='Buguias') return false;
-      return true;
-    }).map(c=>
+    thead.innerHTML = COLUMNS.filter(c=>!c.showOnlyAll || state.currentHub==='All').map(c=>
       `<th data-key="${c.key}">${c.label}<span class="arrow">${state.sortKey===c.key ? (state.sortDir==='asc'?'▲':'▼') : ''}</span></th>`
     ).join('');
     $$('#theadRow th').forEach(th=>{
@@ -938,11 +930,7 @@
       return 0;
     });
 
-    const cols = COLUMNS.filter(c=>{
-      if(c.showOnlyAll && state.currentHub!=='All') return false;
-      if(c.showOnlyBuguias && state.currentHub!=='Buguias') return false;
-      return true;
-    });
+    const cols = COLUMNS.filter(c=>!c.showOnlyAll || state.currentHub==='All');
     const tbody = $('#tbody');
     tbody.innerHTML = rows.map(r=>{
       return '<tr>' + cols.map(c=>{
@@ -1126,6 +1114,5 @@
   init();
 })();
 </script>
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 </body>
 </html>

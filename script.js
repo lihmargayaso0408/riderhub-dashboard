@@ -111,37 +111,7 @@
   }
 
   /* ---------------- Storage helpers ---------------- */
-  // Hubs are now loaded dynamically from Firestore (see Auth.getHubs()).
-  // The hardcoded list is retained as a fallback when Firebase is unavailable.
-  const HUB_FALLBACK = ['Bauko','Buguias','Irisan','Itogon','Itogon Tuding','Kapangan','La Trinidad Pico','MB Atok'];
-  const REMOVED_HUBS = ['MB Mankayan'];
-
-  function isHubActive(hub) {
-    return !REMOVED_HUBS.some(removed => removed.toLowerCase() === String(hub || '').trim().toLowerCase());
-  }
-  function sortHubs(hubs) {
-    return hubs.filter(isHubActive).slice().sort((a,b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
-  }
-
-  // Resolve the current hub list: prefer state.hubs (loaded from Firestore),
-  // fall back to the hardcoded list when not yet loaded.
-  function currentHubs(){
-    return (state.hubs && state.hubs.length) ? sortHubs(state.hubs) : sortHubs(HUB_FALLBACK);
-  }
-
-  // Load the hub list from Auth (Firestore + fallback merge). Safe to call
-  // multiple times; updates state.hubs and triggers a UI refresh if needed.
-  async function loadHubs(){
-    try {
-      const hubs = await window.Auth.getHubs();
-      const changed = JSON.stringify(hubs) !== JSON.stringify(state.hubs);
-      state.hubs = sortHubs(hubs);
-      return changed;
-    } catch(e) {
-      state.hubs = sortHubs(HUB_FALLBACK);
-      return false;
-    }
-  }
+  const HUBS = ['Bauko','MB Atok','Buguias'];
 
   const hasFirebaseStorage = !!(window.firebaseAPI && window.firebaseAPI.isEnabled && window.firebaseAPI.isEnabled());
 
@@ -169,8 +139,8 @@
   };
 
   async function getIndex(){
-    try{ const r = await storage.get('hubs-index', false); return r? JSON.parse(r.value) : Object.fromEntries(HUB_FALLBACK.map(h => [h, []])); }
-    catch(e){ return Object.fromEntries(HUB_FALLBACK.map(h => [h, []])); }
+    try{ const r = await storage.get('hubs-index', false); return r? JSON.parse(r.value) : {Bauko:[],'MB Atok':[],Buguias:[]}; }
+    catch(e){ return {Bauko:[],'MB Atok':[],Buguias:[]}; }
   }
   async function saveIndex(idx){ await storage.set('hubs-index', JSON.stringify(idx), false); }
   async function saveSnapshot(hub,date,rows){
@@ -200,15 +170,12 @@
     return lines.join('\r\n');
   }
 
-function getExportDates(hub){
-     if(hub === 'All'){
-       const hubs = currentHubs();
-       const set = new Set();
-       hubs.forEach(h => { (state.hubIndex[h]||[]).forEach(d => set.add(d)); });
-       return Array.from(set).sort();
-     }
-     return (state.hubIndex[hub]||[]).slice().sort();
-   }
+  function getExportDates(hub){
+    if(hub === 'All'){
+      return Array.from(new Set([...(state.hubIndex.Bauko||[]), ...(state.hubIndex['MB Atok']||[]), ...(state.hubIndex.Buguias||[])])).sort();
+    }
+    return (state.hubIndex[hub]||[]).slice().sort();
+  }
 
   function populateDownloadWeekOptions(){
     const hub = $('#downloadHubSelect').value;
@@ -234,7 +201,7 @@ function getExportDates(hub){
 
   async function buildDownloadRows(hub, date){
     const exportRows = [];
-    const hubs = hub === 'All' ? currentHubs() : [hub];
+    const hubs = hub === 'All' ? HUBS : [hub];
     for(const hubName of hubs){
       const snap = await loadSnapshot(hubName, date);
       if(!snap || !snap.rows) continue;
@@ -326,19 +293,19 @@ function getExportDates(hub){
   }
 
   const state = {
-    hubs: null, // loaded from Firestore (Auth.getHubs); null => not yet loaded
-    hubIndex: Object.fromEntries(HUB_FALLBACK.map(h => [h, []])),
+    hubIndex: {Bauko:[],'MB Atok':[],Buguias:[]},
     currentHub: 'All',
     currentDate: null,
     frequency: 'weekly',
     rows: [],
-    summaries: Object.fromEntries(HUB_FALLBACK.map(h => [h, []])),
+    summaries: {Bauko:[],'MB Atok':[],Buguias:[]},
     sortKey: 'deliverySuccessRate',
     sortDir: 'desc',
     search: '',
     filterVehicle: '',
     filterGroup: '',
     filterGrade: '',
+    hideInactive: true,
     trendChart: null,
     weekPickerMonth: new Date(),
     weekPickerSelectedDate: null,
@@ -349,9 +316,6 @@ function getExportDates(hub){
 
   function fmtPct(n){ return (n||0).toFixed(1)+'%'; }
   function fmtNum(n){ return Math.round(n||0).toLocaleString(); }
-  function normalizeHubName(value) {
-    return String(value || '').trim().toLowerCase().replace(/\s+hub\s*$/i, '').replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
-  }
   function fmtDate(d){
     if(!d) return '—';
     const dt = new Date(d+'T00:00:00');
@@ -375,82 +339,42 @@ function fmtWeekLabel(d){
   }
 
   async function init(){
-    try {
-      const perms = await window.Auth.guard();
-      if(!perms) return; // redirected to login
-      state.perms = perms;
+    const perms = await window.Auth.guard();
+    if(!perms) return; // redirected to login
+    state.perms = perms;
 
-      // Seed hubs collection on first run (best-effort, non-blocking).
-      if (window.Auth && typeof window.Auth.seedHubsIfEmpty === 'function') {
-        window.Auth.seedHubsIfEmpty().catch(()=>{});
-      }
-
-      // Load the dynamic hub list (Firestore + fallback). This populates
-      // state.hubs and is used by applyAccessControl() to build the dropdown.
-      await loadHubs();
-      populateHubSelects();
-
-      const currentUser = window.Auth.currentUser();
-      if(!currentUser){
-        showToast('Session expired. Please sign in again.');
-        setTimeout(()=>{ window.location.href='login.html'; }, 1500);
-        return;
-      }
-
-      if(!hasFirebaseStorage){
-        $('#storageBanner').innerHTML = `<div class="banner">
-          <span>Firebase is not configured yet. Please add your Firebase config before uploading manifests.</span>
-          <button id="dismissBanner">Dismiss</button>
-        </div>`;
-        const db = document.getElementById('dismissBanner');
-        if(db) db.addEventListener('click', ()=>{ $('#storageBanner').innerHTML=''; });
-      }
-      window.addEventListener('error', function(e){
-        showToast('Something went wrong: ' + (e.message || 'unknown error'));
-      });
-      const theme = await loadTheme();
-      applyTheme(theme);
-      state.hubIndex = await getIndex();
-      for (const hub of HUB_FALLBACK) {
-        state.summaries[hub] = await getSummary(hub);
-      }
-      areaLookup = await buildAreaLookup();
-      pnrLookup = await buildPnrLookup();
-      applyAccessControl(perms);
-      await refreshView();
-      wireStaticEvents();
-      if(perms.role === 'admin') refreshAccessBadge();
-      startAutoRefresh();
-
-      // Wire the New Hub modal (admin-only).
-      wireNewHubModal(perms);
-    } catch(err) {
-      console.error('Dashboard init failed:', err);
-      $('#content').innerHTML = '<div class="empty"><h3>Failed to load dashboard</h3><p>' + (err && err.message ? err.message : 'Unknown error') + '</p><p>Check the browser console (F12) for details.</p></div>';
+    if(!hasFirebaseStorage){
+      $('#storageBanner').innerHTML = `<div class="banner">
+        <span>Firebase is not configured yet. Please add your Firebase config before uploading manifests.</span>
+        <button id="dismissBanner">Dismiss</button>
+      </div>`;
+      const db = document.getElementById('dismissBanner');
+      if(db) db.addEventListener('click', ()=>{ $('#storageBanner').innerHTML=''; });
     }
+    window.addEventListener('error', function(e){
+      showToast('Something went wrong: ' + (e.message || 'unknown error'));
+    });
+    const theme = await loadTheme();
+    applyTheme(theme);
+    state.hubIndex = await getIndex();
+    state.summaries.Bauko = await getSummary('Bauko');
+    state.summaries['MB Atok'] = await getSummary('MB Atok');
+    state.summaries.Buguias = await getSummary('Buguias');
+    // Build rider name -> Area lookup from the Riders & Agency sheet
+    areaLookup = await buildAreaLookup();
+    pnrLookup = await buildPnrLookup();
+    applyAccessControl(perms);
+    await refreshView();
+    wireStaticEvents();
+    if(perms.role === 'admin') refreshAccessBadge();
+    startAutoRefresh();
   }
 
   let autoRefreshUnsub = null;
   let pollTimer = null;
   let isRefreshing = false;
-  let hubUnsub = null;
 
   function startAutoRefresh(){
-    // Subscribe to hub list changes so new hubs appear in real-time.
-    if (window.Auth && typeof window.Auth.onHubsChange === 'function') {
-      try {
-        hubUnsub = window.Auth.onHubsChange(hubs => {
-          const changed = JSON.stringify(hubs) !== JSON.stringify(state.hubs);
-          if (changed) {
-      state.hubs = sortHubs(hubs);
-            populateHubSelects();
-            applyAccessControl(state.perms);
-            refreshView();
-          }
-        });
-      } catch (e) { /* ignore */ }
-    }
-
     if(hasFirebaseStorage && window.firebaseAPI && typeof window.firebaseAPI.subscribe === 'function'){
       autoRefreshUnsub = window.firebaseAPI.subscribe(async function(changedKeys){
         const relevant = changedKeys.some(function(k){ return k.startsWith('snapshot:') || k === 'hubs-index' || k.startsWith('summary:'); });
@@ -458,12 +382,9 @@ function fmtWeekLabel(d){
         try {
           isRefreshing = true;
           state.hubIndex = await getIndex();
-          const hubs = currentHubs();
-          hubs.forEach(h => { state.summaries[h] = (state.summaries[h]||[]); });
-          // Refresh summaries for all known hubs
-          for (const h of hubs) {
-            state.summaries[h] = await getSummary(h);
-          }
+          state.summaries.Bauko = await getSummary('Bauko');
+          state.summaries['MB Atok'] = await getSummary('MB Atok');
+          state.summaries.Buguias = await getSummary('Buguias');
           await refreshView();
           showToast('Dashboard updated automatically');
         } catch(e) {
@@ -482,10 +403,9 @@ function fmtWeekLabel(d){
         if(idxChanged){
           isRefreshing = true;
           state.hubIndex = newIndex;
-          const hubs = currentHubs();
-          for (const h of hubs) {
-            state.summaries[h] = await getSummary(h);
-          }
+          state.summaries.Bauko = await getSummary('Bauko');
+          state.summaries['MB Atok'] = await getSummary('MB Atok');
+          state.summaries.Buguias = await getSummary('Buguias');
           await refreshView();
           showToast('Dashboard updated automatically');
         }
@@ -500,39 +420,20 @@ function fmtWeekLabel(d){
   function stopAutoRefresh(){
     if(autoRefreshUnsub){ autoRefreshUnsub(); autoRefreshUnsub = null; }
     if(pollTimer){ clearInterval(pollTimer); pollTimer = null; }
-    if(hubUnsub){ hubUnsub(); hubUnsub = null; }
   }
 
   window.addEventListener('beforeunload', stopAutoRefresh);
 
   function setActiveTab(hub){
     state.currentHub = hub;
-    const valueEl = $('#hubDropdownValue');
-    const trigger = $('#hubDropdownTrigger');
-    if(valueEl) valueEl.textContent = hub==='All' ? 'All Hubs' : hub;
-    $$('#hubDropdownMenu .hub-dropdown-option').forEach(opt=>{
-      opt.classList.toggle('active', opt.dataset.value===hub);
+    $$('.route-stop').forEach(el=>{
+      el.classList.toggle('active', el.dataset.hub===hub);
+      el.setAttribute('aria-pressed', el.dataset.hub===hub ? 'true' : 'false');
     });
-    if(trigger) trigger.setAttribute('aria-expanded', 'false');
-    closeHubDropdownMenu();
   }
 
-  function openHubDropdownMenu(){
-    const menu = $('#hubDropdownMenu');
-    const trigger = $('#hubDropdownTrigger');
-    if(menu) menu.classList.add('open');
-    if(trigger) trigger.setAttribute('aria-expanded', 'true');
-  }
-  function closeHubDropdownMenu(){
-    const menu = $('#hubDropdownMenu');
-    const trigger = $('#hubDropdownTrigger');
-    if(menu) menu.classList.remove('open');
-    if(trigger) trigger.setAttribute('aria-expanded', 'false');
-  }
-
-function allowedHubs(){
-    const hubs = (state.perms && state.perms.hubs && state.perms.hubs.length) ? state.perms.hubs : currentHubs();
-    return sortHubs(hubs);
+  function allowedHubs(){
+    return (state.perms && state.perms.hubs && state.perms.hubs.length) ? state.perms.hubs : HUBS;
   }
 
   function allDatesForCurrentHub(){
@@ -550,6 +451,9 @@ function allowedHubs(){
       if(!selDate) return null;
       const hd = state.hubIndex[hub] || [];
       if(!hd.length) return null;
+      if(state.frequency === 'daily'){
+        return hd.includes(selDate) ? selDate : latestDate(hd);
+      }
       if(state.frequency === 'monthly'){
         const sel = new Date(selDate + 'T00:00:00');
         const inMonth = hd.filter(d => {
@@ -565,28 +469,13 @@ function allowedHubs(){
     }
 
   function applyAccessControl(perms){
+    // Hide route stops the user isn't allowed to view.
     const allowed = allowedHubs();
-    const menu = $('#hubDropdownMenu');
-    if(menu){
-      menu.innerHTML = '';
-      const allLabel = allowed.length > 1 ? 'All Hubs' : (allowed[0] || 'All');
-      const allOpt = document.createElement('button');
-      allOpt.type = 'button';
-      allOpt.className = 'hub-dropdown-option active';
-      allOpt.dataset.value = 'All';
-      allOpt.textContent = allLabel;
-      allOpt.setAttribute('role', 'option');
-      menu.appendChild(allOpt);
-      allowed.forEach(hub => {
-        const opt = document.createElement('button');
-        opt.type = 'button';
-        opt.className = 'hub-dropdown-option';
-        opt.dataset.value = hub;
-        opt.textContent = hub;
-        opt.setAttribute('role', 'option');
-        menu.appendChild(opt);
-      });
-    }
+    $$('.route-stop').forEach(el=>{
+      const hub = el.dataset.hub;
+      const ok = hub==='All' ? allowed.length>1 : allowed.includes(hub);
+      el.style.display = ok ? '' : 'none';
+    });
     state.currentHub = allowed.length>1 ? 'All' : (allowed[0]||'All');
     setActiveTab(state.currentHub);
 
@@ -602,7 +491,6 @@ function allowedHubs(){
       'riders': '#openRidersPageBtn',
       'loss': '#openLossReportBtn',
       'pnr': '#openPnrPageBtn',
-      'dtr': '#openDtrPageBtn',
       'map': '#openAreaMapBtn',
       'accounts': '#openAccountsBtn'
     };
@@ -612,7 +500,7 @@ function allowedHubs(){
       if(b) b.style.display = pages.indexOf(key) === -1 ? 'none' : '';
     });
 
-    // Admin-only: Access Requests + Manage Accounts + New Hub entries.
+    // Admin-only: Access Requests + Manage Accounts entries.
     if(perms.role==='admin'){
       const ab = $('#openAccessBtn'); if(ab) ab.style.display='';
       setupAccessRequests();
@@ -620,11 +508,6 @@ function allowedHubs(){
       if(mb){
         mb.style.display='';
         mb.addEventListener('click', ()=>{ closeSettingsMenu(); window.location.href='accounts.html'; });
-      }
-      const nh = $('#openNewHubBtn');
-      if(nh){
-        nh.style.display='';
-        nh.addEventListener('click', ()=>{ closeSettingsMenu(); openNewHubModal(); });
       }
     }
   }
@@ -714,106 +597,6 @@ function allowedHubs(){
     });
     $('#closeAccess').addEventListener('click', ()=> overlay.classList.remove('show'));
     overlay.addEventListener('click', e=>{ if(e.target.id==='accessOverlay') overlay.classList.remove('show'); });
-  }
-
-  // ---- New Hub modal (admin-only) ----
-  function openNewHubModal(){
-    const overlay = $('#newHubOverlay');
-    const input = $('#newHubNameInput');
-    const msg = $('#newHubModalMsg');
-    const saveBtn = $('#saveNewHub');
-    if(!overlay) return;
-    input.value = '';
-    msg.textContent = '';
-    msg.className = 'modal-msg';
-    saveBtn.disabled = true;
-    overlay.classList.add('show');
-    setTimeout(()=>input.focus(), 50);
-  }
-  function closeNewHubModal(){
-    $('#newHubOverlay').classList.remove('show');
-  }
-  function wireNewHubModal(perms){
-    const overlay = $('#newHubOverlay');
-    const input = $('#newHubNameInput');
-    const msg = $('#newHubModalMsg');
-    const saveBtn = $('#saveNewHub');
-    if(!overlay) return;
-
-    const validate = ()=>{
-      const v = (input.value || '').trim();
-      const existing = currentHubs();
-      let ok = v.length > 0;
-      let err = '';
-      if(!ok) err = 'Enter a hub name.';
-      else if (existing.some(h => h.toLowerCase() === v.toLowerCase())) err = 'A hub named "' + v + '" already exists.';
-      msg.textContent = err;
-      msg.className = err ? 'modal-msg err' : 'modal-msg';
-      saveBtn.disabled = !ok || !!err;
-    };
-    input.addEventListener('input', validate);
-
-    $('#cancelNewHub').addEventListener('click', closeNewHubModal);
-    overlay.addEventListener('click', e=>{ if(e.target.id==='newHubOverlay') closeNewHubModal(); });
-
-    saveBtn.addEventListener('click', async ()=>{
-      const name = (input.value || '').trim();
-      if(!name) return;
-      saveBtn.disabled = true;
-      saveBtn.textContent = 'Saving…';
-      msg.textContent = '';
-      try {
-        if (window.Auth && typeof window.Auth.addHub === 'function') {
-          await window.Auth.addHub(name);
-        } else {
-          throw new Error('Auth.addHub is not available.');
-        }
-        // Refresh the hub list and rebuild UI.
-        await loadHubs();
-        populateHubSelects();
-        applyAccessControl(state.perms);
-        closeNewHubModal();
-        showToast('Added hub <b>' + escapeHtml(name) + '</b>. Grant it to accounts via Manage Accounts.');
-      } catch(e) {
-        msg.textContent = 'Could not add hub: ' + (e && e.message ? e.message : 'unknown error');
-        msg.className = 'modal-msg err';
-      } finally {
-        saveBtn.disabled = false;
-        saveBtn.textContent = 'Save';
-      }
-    });
-  }
-
-  // Repopulate the upload/download hub <select> elements from the dynamic list.
-  function populateHubSelects(){
-    const hubs = sortHubs(currentHubs());
-    const uploadSel = $('#hubSelect');
-    if(uploadSel){
-      const prev = uploadSel.value;
-      uploadSel.innerHTML = '';
-      hubs.forEach(h => {
-        const o = document.createElement('option');
-        o.value = h; o.textContent = h;
-        uploadSel.appendChild(o);
-      });
-      if(prev && hubs.includes(prev)) uploadSel.value = prev;
-      else if(hubs.length) uploadSel.value = hubs[0];
-    }
-    const dlSel = $('#downloadHubSelect');
-    if(dlSel){
-      const prev = dlSel.value;
-      dlSel.innerHTML = '';
-      hubs.forEach(h => {
-        const o = document.createElement('option');
-        o.value = h; o.textContent = h;
-        dlSel.appendChild(o);
-      });
-      const allO = document.createElement('option');
-      allO.value = 'All'; allO.textContent = 'Both hubs';
-      dlSel.appendChild(allO);
-      if(prev && (hubs.includes(prev) || prev==='All')) dlSel.value = prev;
-      else dlSel.value = 'All';
-    }
   }
 
   let calendarYear = null;
@@ -967,20 +750,19 @@ function allowedHubs(){
     }
 
     $('#viewSub').textContent = state.currentHub==='All'
-      ? 'Record from last week'
+      ? 'Combined snapshot — each hub shown as of its latest upload'
       : `Snapshot for ${fmtDate(state.currentDate)}`;
 
     await renderContent();
     updateLastUpdatedNote();
   }
 
-function updateLastUpdatedNote(){
-     const hubs = currentHubs();
-     const all = hubs.flatMap(h => (state.hubIndex[h]||[]));
-     if(all.length===0){ $('#lastUpdatedNote').textContent = 'No manifests uploaded yet.'; return; }
-     const latest = all.sort().slice(-1)[0];
-     $('#lastUpdatedNote').textContent = `Latest manifest on file: ${fmtDate(latest)}`;
-   }
+  function updateLastUpdatedNote(){
+    const all = [...(state.hubIndex.Bauko||[]), ...(state.hubIndex['MB Atok']||[]), ...(state.hubIndex.Buguias||[])];
+    if(all.length===0){ $('#lastUpdatedNote').textContent = 'No manifests uploaded yet.'; return; }
+    const latest = all.sort().slice(-1)[0];
+    $('#lastUpdatedNote').textContent = `Latest manifest on file: ${fmtDate(latest)}`;
+  }
 
   function renderEmpty(){
     const hubName = state.currentHub==='All' ? 'either hub' : state.currentHub;
@@ -988,7 +770,7 @@ function updateLastUpdatedNote(){
       <div class="empty">
         <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#9AA1AC" stroke-width="1.6"><path d="M12 3v13M6 10l6-6 6 6M4 21h16"/></svg>
         <h3>No manifest on file for ${hubName}</h3>
-        <p>Upload the weekly performance CSV to start tracking rider and hub performance.</p>
+        <p>Upload the daily performance CSV to start tracking rider and hub performance.</p>
         <button class="btn-primary" id="emptyUploadBtn">Upload manifest</button>
       </div>`;
     $('#emptyUploadBtn').addEventListener('click', openModal);
@@ -1032,6 +814,7 @@ function animateCountUp(el, target, isPct){
 
 html += '<div class="panels">';
     html += `<div class="panel"><h3>Vehicle types</h3><p class="hint">Rider count by vehicle type</p><div id="trendWrap"></div></div>`;
+    html += `<div class="panel clickable-panel" id="notSolvedPanel" role="link" tabindex="0" title="Open PNR of Riders"><h3>Not Solved PNR <span class="panel-arrow">→</span></h3><p class="hint">Riders with not-solved PNR across all hubs</p><div id="notSolvedWrap"></div></div>`;
     html += '</div>';
 
 html += '<div class="strip">';
@@ -1042,6 +825,7 @@ html += '<div class="strip">';
     html += `<div class="table-panel">
       <div class="table-controls">
         <input type="text" id="searchInput" placeholder="Search rider name or ID…">
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-dim);"><input type="checkbox" id="hideInactiveToggle" ${state.hideInactive ? 'checked' : ''}> Hide inactive riders</label>
         <select id="vehicleFilter"><option value="">All vehicle types</option></select>
         <select id="groupFilter"><option value="">All driver groups</option></select>
 </div>
@@ -1063,10 +847,29 @@ html += '<div class="strip">';
     });
 
 await renderTrend();
+    renderNotSolved();
     renderTopBottom(rows);
     setupTableControls(rows);
     renderTable();
     wireTableDrag();
+
+    // Clicking the "Not Solved PNR" panel opens the PNR of Riders page.
+    const nsPanel = $('#notSolvedPanel');
+    if(nsPanel){
+      const hasPnrAccess = (state.perms && state.perms.pages && state.perms.pages.indexOf('pnr') !== -1);
+      if(hasPnrAccess){
+        const goToPnr = ()=> window.location.href = 'pnr.html';
+        nsPanel.addEventListener('click', goToPnr);
+        nsPanel.addEventListener('keydown', e=>{
+          if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); goToPnr(); }
+        });
+      } else {
+        nsPanel.classList.remove('clickable-panel');
+        nsPanel.removeAttribute('role');
+        nsPanel.removeAttribute('tabindex');
+        nsPanel.title = 'No access to PNR of Riders';
+      }
+    }
   }
 
   /* ---- Sideways drag-to-scroll control for the dashboard table ---- */
@@ -1162,6 +965,64 @@ await renderTrend();
     `;
   }
 
+async function renderNotSolved(){
+    const wrap = $('#notSolvedWrap');
+    if(!wrap) return;
+    const hasPnrAccess = (state.perms && state.perms.pages && state.perms.pages.indexOf('pnr') !== -1);
+    if(!hasPnrAccess){
+      wrap.innerHTML = '<div class="trend-disabled">NO ACCESS</div>';
+      return;
+    }
+    wrap.innerHTML = '<div class="trend-disabled">Loading PNR data…</div>';
+    try{
+      const url = `https://docs.google.com/spreadsheets/d/${PNR_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(PNR_SHEET_NAME)}`;
+      const response = await fetch(url);
+      if(!response.ok) throw new Error('fetch');
+      const text = await response.text();
+      const parsedLines = text.split(/\r\n|\n|\r/).map(parseSheetCsvLine);
+      const headerRowIndex = parsedLines.findIndex(values => {
+        const normalized = values.map(v => String(v||'').trim().toLowerCase());
+        return normalized.some(h=>['date'].includes(h))
+          && normalized.some(h=>['hub'].includes(h))
+          && normalized.some(h=>['rider','rider name','driver','name'].includes(h));
+      });
+      if(headerRowIndex < 0) throw new Error('no header');
+      const normalizedHeaders = parsedLines[headerRowIndex].map(h => String(h||'').trim().toLowerCase());
+      const nameIdx = findSheetHeaderIndex(normalizedHeaders, ['rider','rider name','driver','name']);
+      const statusIdx = findSheetHeaderIndex(normalizedHeaders, ['status']);
+      const countIdx = findSheetHeaderIndex(normalizedHeaders, ['count']);
+      const counts = {};
+      for(let i=headerRowIndex+1;i<parsedLines.length;i++){
+        const values = parsedLines[i];
+        if(!values.some(c => String(c||'').trim() !== '')) continue;
+        const name = String(values[nameIdx]||'').trim();
+        const st = statusIdx>=0 ? String(values[statusIdx]||'').trim().toUpperCase().replace(/[^A-Z]/g,'') : '';
+        if(!name || st !== 'NOTSOLVED') continue;
+        const cnt = countIdx>=0 ? (parseFloat(String(values[countIdx]||'').replace(/[^\d.\-]/g,''))||0) : 0;
+        counts[name] = (counts[name]||0) + cnt;
+      }
+const entries = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+      if(entries.length === 0){
+        wrap.innerHTML = '<div class="trend-disabled">No not-solved PNR for the selected snapshot.</div>';
+        return;
+      }
+      const max = entries[0][1] || 1;
+      wrap.innerHTML = entries.map(([name,cnt], idx) => `
+        <div class="ns-row" style="animation-delay:${Math.min(idx*60,600)}ms">
+          <span class="ns-name">${escapeHtml(name)}</span>
+          <span class="ns-count mono" data-count="${cnt}">0</span>
+        </div>
+      `).join('');
+      // Animate each count up to its final value for a fluid, lively feel.
+      $$('#notSolvedWrap .ns-count').forEach(el=>{
+        const target = el.getAttribute('data-count');
+        animateCountUp(el, fmtNum(target), false);
+      });
+    }catch(e){
+      wrap.innerHTML = '<div class="trend-disabled">Could not load PNR data — check the sheet link and try again.</div>';
+    }
+  }
+
   function renderTopBottom(rows){
     const active = rows.filter(r=>r.daysWorking>0);
     const sorted = active.slice().sort((a,b)=>b.deliverySuccessRate-a.deliverySuccessRate);
@@ -1181,9 +1042,9 @@ await renderTrend();
     {key:'name', label:'Rider', type:'name'},
     {key:'hub', label:'Hub', type:'text', showOnlyAll:true},
     {key:'vehicleType', label:'Vehicle', type:'text'},
-    {key:'area', label:'Area', type:'text', onlyHubs:['Buguias','Bauko']},
+    {key:'area', label:'Area', type:'text'},
     {key:'driverGroup', label:'Group', type:'text'},
-    {key:'attendDays', label:'Days', type:'num'},
+    {key:'attendDays', label:'Days', type:'num', hideOnDaily:true},
     {key:'avgParcelsPerDay', label:'Parcels/Day', type:'num1'},
     {key:'parcelsAssigned', label:'Parcels Assigned', type:'num'},
     {key:'parcelsOnHold', label:'On-hold', type:'num'},
@@ -1193,28 +1054,28 @@ await renderTrend();
 
   function setupTableControls(rows){
     const vSel = $('#vehicleFilter'), gSel = $('#groupFilter');
-    const visibleRows = rows.filter(isActiveRider);
+    const visibleRows = state.hideInactive ? rows.filter(r=>Number(r.daysWorking||0)>0) : rows;
     const vehicles = Array.from(new Set(visibleRows.map(r=>r.vehicleType).filter(Boolean))).sort();
     const groups = Array.from(new Set(visibleRows.map(r=>r.driverGroup).filter(Boolean))).sort();
     vSel.innerHTML = '<option value="">All vehicle types</option>';
     gSel.innerHTML = '<option value="">All driver groups</option>';
     vehicles.forEach(v=>{ const o=document.createElement('option'); o.value=v;o.textContent=v; vSel.appendChild(o); });
     groups.forEach(g=>{ const o=document.createElement('option'); o.value=g;o.textContent=g; gSel.appendChild(o); });
- vSel.value = state.filterVehicle; gSel.value = state.filterGroup;
+vSel.value = state.filterVehicle; gSel.value = state.filterGroup;
     $('#searchInput').value = state.search;
+    $('#hideInactiveToggle').checked = state.hideInactive;
 
     $('#searchInput').addEventListener('input', e=>{ state.search=e.target.value; renderTable(); });
     vSel.addEventListener('change', e=>{ state.filterVehicle=e.target.value; renderTable(); });
- gSel.addEventListener('change', e=>{ state.filterGroup=e.target.value; renderTable(); });
+gSel.addEventListener('change', e=>{ state.filterGroup=e.target.value; renderTable(); });
+     $('#hideInactiveToggle').addEventListener('change', e=>{ state.hideInactive=e.target.checked; renderTable(); });
 
     renderThead();
   }
 
   function visibleColumns(){
-    return COLUMNS.filter(c => {
-      if (c.onlyHubs && !c.onlyHubs.includes(state.currentHub)) return false;
-      return !c.showOnlyAll || state.currentHub === 'All';
-    });
+    return COLUMNS.filter(c => !c.showOnlyAll || state.currentHub === 'All')
+      .filter(c => !(c.hideOnDaily && state.frequency === 'daily'));
   }
 
   function renderThead(){
@@ -1242,15 +1103,11 @@ await renderTrend();
     return 'rate-dark-red';
   }
 
-  function isActiveRider(r){
-    return Number(r.attendDays||0) > 0
-      || Number(r.parcelsAssigned||0) > 0
-      || Number(r.parcelsDelivered||0) > 0
-      || Number(r.deliverySuccessRate||0) > 0;
-  }
-
   function renderTable(){
-    let rows = state.rows.slice().filter(isActiveRider);
+    let rows = state.rows.slice();
+    if(state.hideInactive){
+      rows = rows.filter(r=>Number(r.daysWorking||0) > 0);
+    }
     if(state.search){
       const q = state.search.toLowerCase();
       rows = rows.filter(r => r.name.toLowerCase().includes(q) || String(r.id).includes(q));
@@ -1278,7 +1135,7 @@ if(c.type==='num1') return `<td class="num">${(r[c.key]||0).toFixed(1)}</td>`;
         return `<td>${escapeHtml(r[c.key])}</td>`;
       }).join('') + '</tr>';
     }).join('');
-    const totalBaseRows = state.rows.filter(isActiveRider).length;
+    const totalBaseRows = state.hideInactive ? state.rows.filter(r=>Number(r.daysWorking||0) > 0).length : state.rows.length;
     $('#rowCount').textContent = `Showing ${rows.length} of ${totalBaseRows} riders`;
     if(rows.length===0){
       tbody.innerHTML = `<tr><td colspan="${cols.length}" style="text-align:center;color:var(--text-dim);padding:24px;">No riders match these filters.</td></tr>`;
@@ -1349,22 +1206,19 @@ cells.forEach((day, index)=>{
     selectionText.textContent = input.value ? `Selected date: ${fmtDate(input.value)}` : 'Selected date: —';
   }
 
-function openModal(){
-     $('#overlay').classList.add('show');
-     $('#modalMsg').textContent = '';
-     $('#dropText').innerHTML = '<b>Click to choose</b> or drag a .csv file here';
-     pendingFile = null; pendingParsedRows = null;
-     $('#confirmUpload').disabled = true;
-      const today = new Date();
-      if(!$('#dateInput').value){ $('#dateInput').value = toISODate(today); }
-      state.weekPickerSelectedDate = toISODate(today);
-      state.weekPickerMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-     renderWeekPicker();
-     // Default to the current hub if it's a known hub, else the first hub.
-     const hubs = currentHubs();
-     if(hubs.includes(state.currentHub)) $('#hubSelect').value = state.currentHub;
-     else if(hubs.length) $('#hubSelect').value = hubs[0];
-   }
+  function openModal(){
+    $('#overlay').classList.add('show');
+    $('#modalMsg').textContent = '';
+    $('#dropText').innerHTML = '<b>Click to choose</b> or drag a .csv file here';
+    pendingFile = null; pendingParsedRows = null;
+    $('#confirmUpload').disabled = true;
+     const today = new Date();
+     if(!$('#dateInput').value){ $('#dateInput').value = toISODate(today); }
+     state.weekPickerSelectedDate = toISODate(today);
+     state.weekPickerMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    renderWeekPicker();
+    if(state.currentHub==='Bauko' || state.currentHub==='MB Atok' || state.currentHub==='Buguias') $('#hubSelect').value = state.currentHub;
+  }
   function closeModal(){ $('#overlay').classList.remove('show'); }
 
   function handleFile(file){
@@ -1475,7 +1329,9 @@ function openModal(){
 
       // Resolve the selected date to the actual stored snapshot date(s)
       let targetDates = [];
-      if(state.frequency === 'monthly'){
+      if(state.frequency === 'daily'){
+        targetDates = [state.currentDate];
+      } else if(state.frequency === 'monthly'){
         const sel = new Date(state.currentDate + 'T00:00:00');
         targetDates = allDatesForCurrentHub().filter(d => {
           const m = new Date(d + 'T00:00:00');
@@ -1486,8 +1342,8 @@ function openModal(){
         targetDates = allDatesForCurrentHub().filter(d => toISODate(startOfWeek(d)) === wk);
       }
 
-const deleteSet = new Set(targetDates);
-      const hubsToDelete = (state.currentHub === 'All' ? currentHubs() : [state.currentHub]).filter(hub => {
+     const deleteSet = new Set(targetDates);
+     const hubsToDelete = (state.currentHub === 'All' ? HUBS : [state.currentHub]).filter(hub => {
        const hd = state.hubIndex[hub] || [];
        return hd.some(d => deleteSet.has(d));
      });
@@ -1529,33 +1385,27 @@ const deleteSet = new Set(targetDates);
      }
    }
 
-async function resetAll(){
-     if(!confirm('Clear all stored manifests for all hubs? This cannot be undone.')) return;
-     const hubs = currentHubs();
-     for(const hub of hubs){
-       const dates = state.hubIndex[hub]||[];
-       for(const d of dates){
-         try{ await storage.delete(`snapshot:${hub}:${d}`, false); }catch(e){}
-       }
-       try{ await storage.delete(`summary:${hub}`, false); }catch(e){}
-     }
-     try{ await storage.delete('hubs-index', false); }catch(e){}
-     const freshIndex = {};
-     const freshSummaries = {};
-     hubs.forEach(h => { freshIndex[h] = []; freshSummaries[h] = []; });
-     state.hubIndex = freshIndex;
-     state.summaries = freshSummaries;
-     state.currentDate = null;
-     await refreshView();
-     showToast('All stored data cleared.');
-   }
+  async function resetAll(){
+    if(!confirm('Clear all stored manifests for both hubs? This cannot be undone.')) return;
+    for(const hub of HUBS){
+      const dates = state.hubIndex[hub]||[];
+      for(const d of dates){
+        try{ await storage.delete(`snapshot:${hub}:${d}`, false); }catch(e){}
+      }
+      try{ await storage.delete(`summary:${hub}`, false); }catch(e){}
+    }
+    try{ await storage.delete('hubs-index', false); }catch(e){}
+    state.hubIndex = {Bauko:[],'MB Atok':[],Buguias:[]};
+    state.summaries = {Bauko:[],'MB Atok':[],Buguias:[]};
+    state.currentDate = null;
+    await refreshView();
+    showToast('All stored data cleared.');
+  }
 
 /* ---------------- Riders & Agency modal (single page) ---------------- */
 const RIDERS_SHEET_ID = '1aGJXuO3tz5oLJyL6piEljz4A6cg6l0cnKvmtIpLkqMI';
   const PNR_SHEET_ID = '1aGJXuO3tz5oLJyL6piEljz4A6cg6l0cnKvmtIpLkqMI';
   const PNR_SHEET_NAME = 'PNR';
-  const LOSS_SHEET_ID = '1Y-Okr8YoWQx-xbylmUHndT-xVTUtHzDP6cejtTOXzEU';
-  const LOSS_SHEET_URL = `https://docs.google.com/spreadsheets/d/${LOSS_SHEET_ID}/gviz/tq?tqx=out:csv`;
   const RIDERS_HUB_SHEET = { Buguias:'Buguias', Bauko:'Bauko', 'MB Atok':'MB Atok' };
 const riders = {
     allRows: [],
@@ -1573,12 +1423,11 @@ const riders = {
   // Lookup of rider name+hub+week -> not-solved PNR count, built from the PNR Google Sheet
   let notSolvedPnrMap = new Map();
 
-async function buildAreaLookup(){
-     const map = new Map();
-     const hubs = currentHubs();
-     for(const hub of hubs){
-       try{
-         const sheetName = RIDERS_HUB_SHEET[hub] || hub;
+  async function buildAreaLookup(){
+    const map = new Map();
+    for(const hub of HUBS){
+      try{
+        const sheetName = RIDERS_HUB_SHEET[hub] || hub;
         const url = `https://docs.google.com/spreadsheets/d/${RIDERS_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
         const response = await fetch(url);
         if(!response.ok) continue;
@@ -1862,27 +1711,13 @@ function closeSettingsMenu(){
   }
 
   function wireStaticEvents(){
-    const trigger = $('#hubDropdownTrigger');
-    const menu = $('#hubDropdownMenu');
-    if(trigger && menu){
-      trigger.addEventListener('click', (e)=>{
-        e.stopPropagation();
-        const isOpen = menu.classList.contains('open');
-        if(isOpen){ closeHubDropdownMenu(); }
-        else { openHubDropdownMenu(); }
-      });
-      menu.addEventListener('click', async (e)=>{
-        const opt = e.target.closest('.hub-dropdown-option');
-        if(!opt) return;
-        const hub = opt.dataset.value;
-        setActiveTab(hub);
+    $$('.route-stop').forEach(el=>{
+      el.addEventListener('click', async ()=>{
+        setActiveTab(el.dataset.hub);
         state.currentDate = null;
         await refreshView();
       });
-      document.addEventListener('click', ()=>{
-        closeHubDropdownMenu();
-      });
-    }
+    });
 
      $('#datePickerBtn').addEventListener('click', e=>{
        e.stopPropagation();
@@ -2022,10 +1857,6 @@ $('#openLossReportBtn').addEventListener('click', ()=>{
     $('#openPnrPageBtn').addEventListener('click', ()=>{
       closeSettingsMenu();
       window.location.href = 'pnr.html';
-    });
-    $('#openDtrPageBtn').addEventListener('click', ()=>{
-      closeSettingsMenu();
-      window.location.href = 'riders-dtr.html';
     });
     $('#openAreaMapBtn').addEventListener('click', ()=>{
       closeSettingsMenu();

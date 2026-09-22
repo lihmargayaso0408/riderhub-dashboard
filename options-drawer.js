@@ -66,12 +66,10 @@
     var svgRiders = '<circle cx="9" cy="7" r="4"/><path d="M17 11a4 4 0 0 0 0-8"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M17 13a4 4 0 0 1 4 4v2"/>';
     var svgLoss = '<path d="M12 3v18M8 7l-4 4 4 4M16 7l4 4-4 4"/>';
     var svgPnr = '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h2M8 17h6M12 11h4"/>';
-    var svgDtr = '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v6H8V2"/><path d="M8 10h8M8 14h8M8 18h5"/>';
     var svgMap = '<path d="M9 3 3 6v15l6-3 6 3 6-3V3l-6 3-6-3z"/><path d="M9 3v15M15 6v15"/>';
     var svgLogout = '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>';
     var svgTheme = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
     var svgAccounts = '<circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0-3-3.85"/>';
-    var svgNewHub = '<path d="M12 5v14M5 12h14"/>';
 
     var btn = '<button class="wheel-btn" id="optSettingsToggle" title="Open options" aria-label="Open options menu" type="button">' + wheelSvg + '</button>';
 
@@ -83,10 +81,8 @@
       + item('optRidersBtn', 'Riders &amp; Agency per hub', svgRiders)
       + item('optLossBtn', 'Loss Report per hub', svgLoss)
       + item('optPnrBtn', 'PNR of Riders', svgPnr)
-      + item('optDtrBtn', 'Riders DTR', svgDtr)
        + item('optAreaBtn', 'Area Map', svgMap)
        + item('optAccountsBtn', 'Manage Accounts', svgAccounts)
-       + item('optNewHubBtn', 'New Hub', svgNewHub)
        + item('optLogoutBtn', 'Log out', svgLogout)
       + '<button class="drawer-item drawer-item-theme" id="optThemeToggle" type="button">'
       + icon(svgTheme) + '<span class="drawer-label">Dark mode</span>'
@@ -96,22 +92,7 @@
     var backdrop = '<div class="drawer-backdrop" id="optDrawerBackdrop" hidden></div>';
     var drawer = '<aside class="drawer" id="optSettingsDrawer" aria-hidden="true">' + drawerHead + drawerBody + '</aside>';
 
-    // New Hub modal (admin-only). Injected once into the body so it can be
-    // reused across all sub-pages. The dashboard (index.html) has its own
-    // inline copy; this one is for sub-pages that load options-drawer.js.
-    var newHubModal = '<div class="overlay" id="optNewHubOverlay" hidden>'
-      + '<div class="modal">'
-      + '<h3>New Hub</h3>'
-      + '<p class="hint">Add a hub to the shared registry. It will appear on every rider-related page once an admin grants it to their account via Manage Accounts.</p>'
-      + '<div class="field"><label for="optNewHubNameInput">Hub name</label>'
-      + '<input type="text" id="optNewHubNameInput" placeholder="e.g. Tinoc" autocomplete="off"></div>'
-      + '<div class="modal-msg" id="optNewHubModalMsg"></div>'
-      + '<div class="modal-actions">'
-      + '<button class="btn-ghost" id="optCancelNewHub">Cancel</button>'
-      + '<button class="btn-primary" id="optSaveNewHub" disabled>Save</button>'
-      + '</div></div></div>';
-
-    return '<div class="opt-fab-shell" id="optFabShell">' + btn + '</div>' + backdrop + drawer + newHubModal;
+    return '<div class="opt-fab-shell" id="optFabShell">' + btn + '</div>' + backdrop + drawer;
   }
 
   function positionWheel() {
@@ -206,7 +187,7 @@
     window.addEventListener('touchcancel', onEnd);
   }
 
-function wireEvents() {
+  function wireEvents() {
     var wheel = document.getElementById('optSettingsToggle');
     var closeBtn = document.getElementById('optDrawerClose');
     var backdrop = document.getElementById('optDrawerBackdrop');
@@ -226,22 +207,15 @@ function wireEvents() {
     var riders = document.getElementById('optRidersBtn');
     var loss = document.getElementById('optLossBtn');
     var pnr = document.getElementById('optPnrBtn');
-    var dtr = document.getElementById('optDtrBtn');
     var area = document.getElementById('optAreaBtn');
     var logout = document.getElementById('optLogoutBtn');
     if (home) home.addEventListener('click', go('index.html'));
     if (riders) riders.addEventListener('click', go('riders-agency.html'));
     if (loss) loss.addEventListener('click', go('loss-report.html'));
     if (pnr) pnr.addEventListener('click', go('pnr.html'));
-    if (dtr) dtr.addEventListener('click', go('riders-dtr.html'));
     if (area) area.addEventListener('click', go('area-map.html'));
     var accounts = document.getElementById('optAccountsBtn');
     if (accounts) accounts.addEventListener('click', go('accounts.html'));
-    var newHub = document.getElementById('optNewHubBtn');
-    if (newHub) newHub.addEventListener('click', function () {
-      closeMenu();
-      openNewHubModal();
-    });
     if (logout) logout.addEventListener('click', async function(){
       closeMenu();
       try { await window.Auth.logout(); } catch (e) {}
@@ -255,88 +229,13 @@ function wireEvents() {
       applyTheme(next);
       saveTheme(next);
     });
-
-    // ---- New Hub modal (admin-only, for sub-pages) ----
-    wireNewHubModal();
-  }
-
-  function closeNewHubModal(){
-    var overlay = document.getElementById('optNewHubOverlay');
-    if (overlay) overlay.hidden = true;
-  }
-  function openNewHubModal(){
-    var overlay = document.getElementById('optNewHubOverlay');
-    var input = document.getElementById('optNewHubNameInput');
-    var msg = document.getElementById('optNewHubModalMsg');
-    var saveBtn = document.getElementById('optSaveNewHub');
-    if (!overlay) return;
-    input.value = '';
-    msg.textContent = '';
-    msg.className = 'modal-msg';
-    saveBtn.disabled = true;
-    overlay.hidden = false;
-    setTimeout(function(){ input.focus(); }, 50);
-  }
-  function wireNewHubModal(){
-    var overlay = document.getElementById('optNewHubOverlay');
-    var input = document.getElementById('optNewHubNameInput');
-    var msg = document.getElementById('optNewHubModalMsg');
-    var saveBtn = document.getElementById('optSaveNewHub');
-    if (!overlay) return;
-
-    var validate = function(){
-      var v = (input.value || '').trim();
-      var err = '';
-      if (!v.length) err = 'Enter a hub name.';
-      msg.textContent = err;
-      msg.className = err ? 'modal-msg err' : 'modal-msg';
-      saveBtn.disabled = !v.length || !!err;
-    };
-    input.addEventListener('input', validate);
-
-    var cancelBtn = document.getElementById('optCancelNewHub');
-    if (cancelBtn) cancelBtn.addEventListener('click', closeNewHubModal);
-    overlay.addEventListener('click', function(e){ if (e.target.id === 'optNewHubOverlay') closeNewHubModal(); });
-
-    if (saveBtn) saveBtn.addEventListener('click', async function(){
-      var name = (input.value || '').trim();
-      if (!name) return;
-      saveBtn.disabled = true;
-      saveBtn.textContent = 'Saving…';
-      msg.textContent = '';
-      try {
-        if (window.Auth && typeof window.Auth.addHub === 'function') {
-          await window.Auth.addHub(name);
-        } else {
-          throw new Error('Auth.addHub is not available.');
-        }
-        closeNewHubModal();
-        if (typeof window.showHubToast === 'function') {
-          window.showHubToast('Added hub <b>' + name + '</b>. Grant it to accounts via Manage Accounts.');
-        } else {
-          var t = document.getElementById('toast');
-          if (t) {
-            t.innerHTML = 'Added hub <b>' + name + '</b>.';
-            t.classList.add('show');
-            clearTimeout(t._timer);
-            t._timer = setTimeout(function(){ t.classList.remove('show'); }, 3200);
-          }
-        }
-      } catch(e) {
-        msg.textContent = 'Could not add hub: ' + (e && e.message ? e.message : 'unknown error');
-        msg.className = 'modal-msg err';
-      } finally {
-        saveBtn.disabled = false;
-        saveBtn.textContent = 'Save';
-      }
-    });
   }
 
   function init() {
     if (document.getElementById('optFabShell')) return; // already injected
     var host = document.createElement('div');
     host.innerHTML = buildHTML();
-    // Append the whole block (button + backdrop + drawer + modal) to the body
+    // Append the whole block (button + backdrop + drawer) to the body
     while (host.firstChild) document.body.appendChild(host.firstChild);
 
     applyTheme(getSavedTheme());
@@ -362,7 +261,6 @@ function wireEvents() {
             'optRidersBtn': 'riders',
             'optLossBtn': 'loss',
             'optPnrBtn': 'pnr',
-            'optDtrBtn': 'dtr',
             'optAreaBtn': 'map',
             'optAccountsBtn': 'accounts'
           };
@@ -373,10 +271,6 @@ function wireEvents() {
             }
           });
         }
-
-        // The New Hub button is admin-only.
-        var newHubBtn = document.getElementById('optNewHubBtn');
-        if (newHubBtn && !isAdmin) newHubBtn.style.display = 'none';
       } catch(e) {}
     })();
   }

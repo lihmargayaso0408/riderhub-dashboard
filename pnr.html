@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PNR of Riders</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <script src="firebase-config.js"></script>
@@ -82,7 +81,12 @@
         <div class="status-box" id="sheetStatus">Loading sheet…</div>
       </div>
     </div>
-    <div class="tabs" id="hubTabs"></div>
+    <div class="tabs" id="hubTabs">
+      <button class="tab-btn active" data-hub="Buguias" type="button">Buguias</button>
+      <button class="tab-btn" data-hub="MB Atok" type="button">MB Atok</button>
+      <button class="tab-btn" data-hub="MB Mankayan" type="button">MB Mankayan</button>
+      <button class="tab-btn" data-hub="Bauko" type="button">Bauko</button>
+    </div>
     <div class="stats-row" id="statsRow"></div>
     <div class="search-row">
       <input type="text" id="searchInput" placeholder="Search date, rider, parcel TN, status…">
@@ -113,55 +117,17 @@
     if (!__perms) throw new Error('redirect');
     const PNR_SHEET_ID = '1aGJXuO3tz5oLJyL6piEljz4A6cg6l0cnKvmtIpLkqMI';
     const PNR_SHEET_NAME = 'PNR';
-    const HUB_FALLBACK = ['Bauko','Buguias','Irisan','Itogon','Itogon Tuding','Kapangan','La Trinidad Pico','MB Atok'];
-
-    async function getHubsList(){
-      try {
-        if (window.Auth && typeof window.Auth.getHubs === 'function') {
-          const hubs = await window.Auth.getHubs();
-          if (hubs && hubs.length) return hubs;
-        }
-      } catch (e) { /* fall through */ }
-      return HUB_FALLBACK.slice();
-    }
-
-    function buildHubTabs(hubs){
-      const container = document.getElementById('hubTabs');
-      if (!container) return;
-      container.innerHTML = '';
-      (hubs || []).forEach(hub => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'tab-btn';
-        btn.dataset.hub = hub;
-        btn.textContent = hub;
-        container.appendChild(btn);
-      });
-      tabButtons.length = 0;
-      Array.from(container.querySelectorAll('.tab-btn')).forEach(b => tabButtons.push(b));
-      tabButtons.forEach(btn => {
-        btn.addEventListener('click', async () => {
-          if (btn.dataset.hub === currentHub) return;
-          currentHub = btn.dataset.hub;
-          tabButtons.forEach(b => b.classList.toggle('active', b === btn));
-          statusEl.textContent = 'Loading sheet…';
-          rowsEl.innerHTML = '<tr><td colspan="7" class="muted">Loading...</td></tr>';
-          renderStats();
-          renderRows();
-        });
-      });
-    }
 
     const statusEl = document.getElementById('sheetStatus');
     const rowsEl = document.getElementById('pnrRows');
     const statsRowEl = document.getElementById('statsRow');
     const searchEl = document.getElementById('searchInput');
     const monthFilterEl = document.getElementById('monthFilter');
-    const tabButtons = [];
+    const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
     const sortableHeaders = Array.from(document.querySelectorAll('th[data-sort]'));
 
     function applyHubFilter(){
-      const allowed = (__perms && __perms.hubs && __perms.hubs.length) ? __perms.hubs : HUB_FALLBACK;
+      const allowed = (__perms && __perms.hubs && __perms.hubs.length) ? __perms.hubs : ['Buguias','MB Atok','Bauko'];
       tabButtons.forEach(btn=>{
         const hub = btn.dataset.hub;
         const ok = allowed.includes(hub) || (hub==='All' && allowed.length>1);
@@ -454,9 +420,9 @@ const totalAmount = rows
 
     if (typeof window.applySavedTheme === 'function') window.applySavedTheme();
 
-// Read optional query params (?rider=...&hub=...) passed from the dashboard's PNR link
+    // Read optional query params (?rider=...&hub=...) passed from the dashboard's PNR link
     (function applyQueryParams() {
-      const params = new URLSearchParams(window.location.search);
+const params = new URLSearchParams(window.location.search);
       const riderParam = params.get('rider');
       const hubParam = params.get('hub');
       const weekParam = params.get('week');
@@ -494,24 +460,20 @@ const totalAmount = rows
       });
     });
 
-    // Build hub tabs dynamically, then apply access control and load data.
-    (async function start(){
-      const hubs = await getHubsList();
-      buildHubTabs(hubs);
-      applyHubFilter();
-      applyQueryParams();
-      loadSheet();
+    tabButtons.forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (btn.dataset.hub === currentHub) return;
+        currentHub = btn.dataset.hub;
+        tabButtons.forEach(b => b.classList.toggle('active', b === btn));
+        statusEl.textContent = 'Loading sheet…';
+        rowsEl.innerHTML = '<tr><td colspan="7" class="muted">Loading...</td></tr>';
+        renderStats();
+        renderRows();
+      });
+    });
 
-      // Subscribe to hub changes so new hubs appear in real-time.
-      if (window.Auth && typeof window.Auth.onHubsChange === 'function') {
-        try {
-          window.Auth.onHubsChange(newHubs => {
-            buildHubTabs(newHubs);
-            applyHubFilter();
-          });
-        } catch (e) { /* ignore */ }
-      }
-    })();
+    applyHubFilter();
+    loadSheet();
 
     setInterval(async function(){
       if(document.hidden) return;
