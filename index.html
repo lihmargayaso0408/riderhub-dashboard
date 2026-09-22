@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Rider Performance System — Rider & Hub Performance</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdnjs.cloudflare.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -36,21 +37,15 @@
       </div>
     </div>
   </div>
-  <div class="route">
-    <div class="route-track"></div>
-    <div class="route-truck" id="routeTruck"></div>
-    <button class="route-stop route-left" data-hub="All">
-      <span class="route-dot"></span><span class="route-label">All Hubs</span>
-    </button>
-    <button class="route-stop" data-hub="Buguias">
-      <span class="route-dot"></span><span class="route-label">Buguias</span>
-    </button>
-    <button class="route-stop" data-hub="MB Atok">
-      <span class="route-dot"></span><span class="route-label">MB Atok</span>
-    </button>
-    <button class="route-stop route-right" data-hub="Bauko">
-      <span class="route-dot"></span><span class="route-label">Bauko</span>
-    </button>
+  <div class="hub-filter-wrap">
+    <span class="hub-filter-label">Hub</span>
+    <div class="hub-dropdown" id="hubDropdown">
+      <button type="button" class="hub-dropdown-trigger" id="hubDropdownTrigger" aria-haspopup="listbox" aria-expanded="false">
+        <span class="hub-dropdown-value" id="hubDropdownValue">All Hubs</span>
+        <svg class="hub-dropdown-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="hub-dropdown-menu" id="hubDropdownMenu" role="listbox"></div>
+    </div>
   </div>
 </div>
 
@@ -87,7 +82,6 @@
       </div>
     </div>
       <div class="freq-toggle" id="freqToggle" role="group" aria-label="View frequency">
-        <button type="button" class="freq-btn" data-freq="daily">Daily</button>
         <button type="button" class="freq-btn active" data-freq="weekly">Weekly</button>
         <button type="button" class="freq-btn" data-freq="monthly">Monthly</button>
       </div>
@@ -149,6 +143,18 @@
       </span>
       <span class="drawer-label">PNR of Riders</span>
     </button>
+    <button class="drawer-item" id="openDtrPageBtn" type="button">
+      <span class="drawer-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v6H8V2"/><path d="M8 10h8M8 14h8M8 18h5"/></svg>
+      </span>
+      <span class="drawer-label">Riders DTR</span>
+    </button>
+    <button class="drawer-item" id="openRankingPageBtn" type="button">
+      <span class="drawer-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M19 9V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14"/><path d="m9 14 5-5 5 5"/></svg>
+      </span>
+      <span class="drawer-label">Rider Ranking</span>
+    </button>
     <button class="drawer-item" id="openAreaMapBtn" type="button">
       <span class="drawer-icon" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3 3 6v15l6-3 6 3 6-3V3l-6 3-6-3z"/><path d="M9 3v15M15 6v15"/></svg>
@@ -167,6 +173,12 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0-3-3.85"/></svg>
       </span>
       <span class="drawer-label">Manage Accounts</span>
+    </button>
+    <button class="drawer-item" id="openNewHubBtn" type="button" style="display:none;">
+      <span class="drawer-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+      </span>
+      <span class="drawer-label">New Hub</span>
     </button>
     <button class="drawer-item" id="logoutBtn" type="button">
       <span class="drawer-icon" aria-hidden="true">
@@ -187,18 +199,22 @@
 <!-- Upload modal -->
 <div class="overlay" id="overlay">
   <div class="modal">
-     <h3>Upload daily manifest</h3>
-     <p class="hint">Drop in the daily performance CSV. It gets added to the hub's history for the selected date — nothing gets overwritten unless the date matches.</p>
+      <h3>Upload weekly manifest</h3>
+      <p class="hint">Drop in the weekly performance CSV. It gets added to the hub's history for the selected date — nothing gets overwritten unless the date matches.</p>
     <div class="field">
       <label for="hubSelect">Hub</label>
       <select id="hubSelect">
         <option value="Bauko">Bauko</option>
-        <option value="MB Atok">MB Atok</option>
         <option value="Buguias">Buguias</option>
+        <option value="Irisan">Irisan</option>
+        <option value="Itogon">Itogon</option>
+        <option value="Itogon Tuding">Itogon Tuding</option>
+        <option value="Kapangan">Kapangan</option>
+        <option value="La Trinidad Pico">La Trinidad Pico</option>
+        <option value="MB Atok">MB Atok</option>
       </select>
     </div>
     <div class="field">
-       <label for="dateInput">Date</label>
       <div class="week-picker-card" id="weekPickerCard">
         <div class="week-picker-nav">
           <button type="button" id="weekPrevBtn" class="week-picker-nav-btn" aria-label="Previous month">‹</button>
@@ -215,7 +231,6 @@
        <div id="weekHint" style="font-size:12px;color:var(--text-dim);margin-top:6px;">Pick the date for this manifest. Today is highlighted.</div>
     </div>
     <div class="field">
-      <label>File</label>
       <label class="drop" id="dropZone" for="fileInput">
         <input type="file" id="fileInput" accept=".csv" class="visually-hidden">
         <div id="dropText"><b>Click to choose</b> or drag a .csv file here</div>
@@ -237,8 +252,13 @@
       <label for="downloadHubSelect">Hub</label>
       <select id="downloadHubSelect">
         <option value="Bauko">Bauko</option>
-        <option value="MB Atok">MB Atok</option>
         <option value="Buguias">Buguias</option>
+        <option value="Irisan">Irisan</option>
+        <option value="Itogon">Itogon</option>
+        <option value="Itogon Tuding">Itogon Tuding</option>
+        <option value="Kapangan">Kapangan</option>
+        <option value="La Trinidad Pico">La Trinidad Pico</option>
+        <option value="MB Atok">MB Atok</option>
         <option value="All">Both hubs</option>
       </select>
     </div>
@@ -261,9 +281,14 @@
     <p class="hint">Data is loaded from your Google Sheet and split by hub.</p>
     <div class="riders-meta">
       <div class="riders-tabs" id="ridersHubTabs">
-        <button class="riders-tab-btn active" data-hub="Buguias" type="button">Buguias</button>
-        <button class="riders-tab-btn" data-hub="MB Atok" type="button">MB Atok</button>
         <button class="riders-tab-btn" data-hub="Bauko" type="button">Bauko</button>
+        <button class="riders-tab-btn active" data-hub="Buguias" type="button">Buguias</button>
+        <button class="riders-tab-btn" data-hub="Irisan" type="button">Irisan</button>
+        <button class="riders-tab-btn" data-hub="Itogon" type="button">Itogon</button>
+        <button class="riders-tab-btn" data-hub="Itogon Tuding" type="button">Itogon Tuding</button>
+        <button class="riders-tab-btn" data-hub="Kapangan" type="button">Kapangan</button>
+        <button class="riders-tab-btn" data-hub="La Trinidad Pico" type="button">La Trinidad Pico</button>
+        <button class="riders-tab-btn" data-hub="MB Atok" type="button">MB Atok</button>
       </div>
       <div class="status-box" id="ridersStatus">Loading sheet…</div>
     </div>
@@ -298,20 +323,40 @@
 </div>
 
 <!-- Access Requests modal (admin) -->
-<div class="overlay" id="accessOverlay">
-  <div class="modal modal-wide">
-    <h3>Access Requests</h3>
-    <p class="hint">Approve new users and choose which hubs, actions, and pages they can use.</p>
-    <div class="modal-msg" id="accessModalMsg"></div>
-    <div id="accessList" class="access-list"></div>
-    <div class="modal-actions">
-      <button class="btn-ghost" id="closeAccess">Close</button>
+  <div class="overlay" id="accessOverlay">
+    <div class="modal modal-wide">
+      <h3>Access Requests</h3>
+      <p class="hint">Approve new users and choose which hubs, actions, and pages they can use.</p>
+      <div class="modal-msg" id="accessModalMsg"></div>
+      <div id="accessList" class="access-list"></div>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="closeAccess">Close</button>
+      </div>
     </div>
   </div>
-</div>
+
+  <!-- New Hub modal (admin) -->
+  <div class="overlay" id="newHubOverlay">
+    <div class="modal">
+      <h3>New Hub</h3>
+      <p class="hint">Add a hub to the shared registry. It will appear on every rider-related page once an admin grants it to their account via Manage Accounts.</p>
+      <div class="field">
+        <label for="newHubNameInput">Hub name</label>
+        <input type="text" id="newHubNameInput" placeholder="e.g. Tinoc" autocomplete="off">
+      </div>
+      <div class="modal-msg" id="newHubModalMsg"></div>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="cancelNewHub">Cancel</button>
+        <button class="btn-primary" id="saveNewHub" disabled>Save</button>
+      </div>
+    </div>
+  </div>
 
 <!-- Firebase Config (Standard Script) -->
 <script src="firebase-config.js"></script>
+
+<!-- Charts (deferred so it doesn't block rendering) -->
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 
 <!-- Firebase Client (Module Script) -->
 <script type="module" src="firebase-client.js"></script>
@@ -319,7 +364,7 @@
 <!-- Auth + access control (Module Script) -->
 <script type="module" src="auth.js"></script>
 
-<!-- Your Main Logic -->
-<script src="script.js" defer></script>
+  <!-- Your Main Logic -->
+  <script type="module" src="script.js"></script>
 </body>
 </html>

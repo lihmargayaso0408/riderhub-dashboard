@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rider Ranking</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <script src="firebase-config.js"></script>
+    <script type="module" src="firebase-client.js"></script>
+    <script type="module" src="auth.js"></script>
+    <style>
+    body{padding:0;margin:0;}
+    .page-shell{max-width:1440px;margin:0 auto;padding:28px;}
+    .page-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;}
+    .page-head h1{font-family:'Space Grotesk',sans-serif;font-size:24px;margin:0;}
+    .page-head p{margin:4px 0 0;color:var(--text-dim);font-size:13px;}
+    .status-box{background:var(--card);border:1px solid var(--line-2);border-radius:6px;padding:12px 14px;font-size:13px;color:var(--text-dim);}
+    .page-actions{display:flex;align-items:center;gap:10px;}
+    .back-link{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 12px;border-radius:999px;cursor:pointer;font-size:13px;text-decoration:none;transition:background .15s ease,border-color .15s ease;}
+    .back-link:hover{background:var(--hover);}
+    .tabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+    .tab-btn{border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 12px;border-radius:999px;cursor:pointer;font-size:13px;transition:transform .2s ease,background .15s ease,border-color .15s ease,color .15s ease;}
+    .tab-btn:hover{transform:translateY(-2px);}
+    .tab-btn.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+    .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}
+    @media (max-width:700px){.stats-row{grid-template-columns:repeat(2,1fr);}}
+    .stat-card{background:var(--card);border:1px solid var(--line-2);border-radius:6px;padding:14px;transition:transform .25s cubic-bezier(.22,.61,.36,1),box-shadow .25s ease,border-color .25s ease;}
+    .stat-card:hover{transform:translateY(-3px);box-shadow:0 10px 24px var(--shadow);border-color:var(--amber);}
+    .stat-label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin-bottom:8px;}
+    .stat-value{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;}
+    .stat-value.teal{color:var(--teal);}
+    .stat-value.brick{color:var(--brick);}
+    .stat-value.amber{color:var(--amber-deep);}
+    .search-row{margin-bottom:12px;}
+    .search-row input{width:100%;max-width:340px;padding:9px 12px;border:1px solid var(--line);border-radius:3px;font-family:'IBM Plex Sans';font-size:13px;background:var(--card);color:var(--text);}
+    .table-card{background:var(--card);border:1px solid var(--line-2);border-radius:8px;padding:16px;overflow:auto;}
+    table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:1000px;}
+    th, td{padding:9px 11px;border-bottom:1px solid var(--line-2);text-align:left;white-space:nowrap;}
+    th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);cursor:pointer;user-select:none;}
+    th:hover{color:var(--text);}
+    tbody tr{transition:background .12s ease;}
+    tbody tr:hover{background:var(--hover);}
+    .muted{color:var(--text-dim);}
+    .error{color:var(--brick);}
+    .num{font-family:'IBM Plex Mono',monospace;text-align:right;}
+    .rank-badge{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:12px;}
+    .rank-1{background:var(--amber);color:var(--ink);}
+    .rank-2{background:var(--olive);color:#fff;}
+    .rank-3{background:var(--brick);color:#fff;}
+    .rank-other{background:var(--hover);color:var(--text);}
+    .perf-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;}
+    .perf-top{background:rgba(63,143,109,.14);color:var(--teal);}
+    .perf-bottom{background:rgba(239,68,68,.12);color:var(--brick);}
+    .animate-in{animation:fadeUp .5s cubic-bezier(.22,.61,.36,1) both;}
+    .delay-1{animation-delay:.05s;}
+    .delay-2{animation-delay:.1s;}
+    .delay-3{animation-delay:.15s;}
+    .delay-4{animation-delay:.2s;}
+  </style>
+</head>
+<body>
+  <div class="page-shell">
+    <div class="page-head">
+      <div>
+        <h1>Rider Ranking</h1>
+        <p>Top and least performers per hub based on Delivery Success Rate</p>
+      </div>
+      <div class="page-actions">
+        <a class="back-link" href="index.html">← Back to Rider Performance System</a>
+        <div class="status-box" id="rankingStatus">Loading data…</div>
+      </div>
+    </div>
+    <div class="tabs" id="hubTabs"></div>
+    <div class="stats-row" id="statsRow"></div>
+    <div class="search-row">
+      <input type="text" id="searchInput" placeholder="Search rider name or ID...">
+    </div>
+    <div class="table-card" id="tableCard">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:5%;" data-sort="rank">Rank</th>
+            <th style="width:20%;" data-sort="rider name">Rider Name</th>
+            <th style="width:10%;" data-sort="driver id">Driver ID</th>
+            <th style="width:12%;" data-sort="hub">Hub</th>
+            <th style="width:12%;" data-sort="vehicle">Vehicle</th>
+            <th style="width:10%;" data-sort="days working">Days Working</th>
+            <th style="width:12%;" data-sort="parcels/day">Parcels/Day</th>
+            <th style="width:12%;" data-sort="delivery success">Delivery Success</th>
+            <th style="width:10%;" data-sort="attendance">Attendance</th>
+            <th style="width:12%;" data-sort="parcels delivered">Parcels Delivered</th>
+          </tr>
+        </thead>
+        <tbody id="rankingRows"></tbody>
+      </table>
+    </div>
+  </div>
+
+<script type="module">
+    const __perms = await window.Auth.guard('ranking');
+    if (!__perms) throw new Error('redirect');
+    const HUB_FALLBACK = ['Bauko','Buguias','Irisan','Itogon','Itogon Tuding','Kapangan','La Trinidad Pico','MB Atok'];
+    const REMOVED_HUBS = ['MB Mankayan'];
+
+    function isHubActive(hub) {
+      return !REMOVED_HUBS.some(removed => removed.toLowerCase() === String(hub || '').trim().toLowerCase());
+    }
+    function sortHubs(hubs) {
+      return hubs.filter(isHubActive).slice().sort((a,b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
+    }
+
+    function buildHubTabs(hubs){
+      const container = document.getElementById('hubTabs');
+      if (!container) return;
+      container.innerHTML = '';
+      const allBtn = document.createElement('button');
+      allBtn.type = 'button';
+      allBtn.className = 'tab-btn active';
+      allBtn.dataset.hub = 'All';
+      allBtn.textContent = 'All Hubs';
+      container.appendChild(allBtn);
+      (hubs || []).forEach(hub => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'tab-btn';
+        btn.dataset.hub = hub;
+        btn.textContent = hub;
+        container.appendChild(btn);
+      });
+      tabButtons.length = 0;
+      Array.from(container.querySelectorAll('.tab-btn')).forEach(b => tabButtons.push(b));
+      tabButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+          if (btn.dataset.hub === currentHub) return;
+          currentHub = btn.dataset.hub;
+          tabButtons.forEach(b => b.classList.toggle('active', b === btn));
+          statusEl.textContent = 'Loading data…';
+          renderStats();
+          renderRows();
+        });
+      });
+    }
+
+    const statusEl = document.getElementById('rankingStatus');
+    const rowsEl = document.getElementById('rankingRows');
+    const statsRowEl = document.getElementById('statsRow');
+    const searchEl = document.getElementById('searchInput');
+    const tabButtons = [];
+    let allRows = [];
+    let currentHub = 'All';
+    let search = '';
+    let sortKey = 'deliverySuccessRate';
+    let sortDir = 'desc';
+
+    function applyHubFilter(){
+      const allowed = (__perms && __perms.hubs && __perms.hubs.length) ? __perms.hubs : HUB_FALLBACK;
+      tabButtons.forEach(btn=>{
+        const hub = btn.dataset.hub;
+        const ok = hub === 'All' ? allowed.length > 1 : allowed.includes(hub);
+        btn.style.display = ok ? '' : 'none';
+      });
+      if(!(allowed.includes(currentHub) || (currentHub === 'All' && allowed.length > 1))){
+        currentHub = allowed.length > 1 ? 'All' : (allowed[0] || 'All');
+        tabButtons.forEach(b=>b.classList.toggle('active', b.dataset.hub===currentHub));
+      }
+    }
+
+    function normalizeHubName(value) {
+      return String(value || '').trim().toLowerCase().replace(/\s+hub\s*$/i, '').replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+
+    async function loadData() {
+      try {
+        // Check if firebaseAPI is available
+        if (!window.firebaseAPI || !window.firebaseAPI.isEnabled()) {
+          statusEl.innerHTML = '<span class="error">Firebase not configured — cannot load ranking data.</span>';
+          return;
+        }
+
+        // Load hub list from Firestore
+        const hubs = await window.Auth.getHubs();
+        console.log('Available hubs:', hubs);
+        const allData = [];
+        
+        for (const hub of hubs) {
+          try {
+            const indexResult = await window.firebaseAPI.get('hubs-index');
+            if (!indexResult || !indexResult.value) continue;
+            const index = JSON.parse(indexResult.value);
+            const dates = index[hub] || [];
+            console.log(`Hub ${hub} dates:`, dates);
+            if (!dates.length) continue;
+            const latestDate = dates.sort().slice(-1)[0];
+            console.log(`Loading snapshot for ${hub}:${latestDate}`);
+            const snapResult = await window.firebaseAPI.get(`snapshot:${hub}:${latestDate}`);
+            if (!snapResult || !snapResult.value) continue;
+            const snap = JSON.parse(snapResult.value);
+            console.log(`Snapshot data for ${hub}:`, snap);
+            if (snap && snap.rows) {
+              snap.rows.forEach(r => allData.push(Object.assign({}, r, { hub })));
+            }
+          } catch (e) {
+            console.warn('Failed to load data for hub:', hub, e);
+          }
+        }
+
+        console.log('All data collected:', allData);
+        allRows = allData.filter(r => r.daysWorking > 0 && r.deliverySuccessRate > 0);
+        console.log('Filtered rows:', allRows);
+        debugLogSample();
+        renderStats();
+        renderRows();
+        statusEl.textContent = `Loaded ${allRows.length} active rider records from ${hubs.length} hubs`;
+      } catch (err) {
+        console.error(err);
+        statusEl.innerHTML = '<span class="error">Could not load ranking data: ' + (err.message || 'unknown error') + '</span>';
+        rowsEl.innerHTML = '<tr><td colspan="10" class="error">No data available.</td></tr>';
+        statsRowEl.innerHTML = '';
+      }
+    }
+
+    function getFilteredRows() {
+      let rows = allRows;
+      if (currentHub !== 'All') {
+        const target = normalizeHubName(currentHub);
+        rows = rows.filter(r => normalizeHubName(r.hub) === target);
+      }
+      if (search) {
+        const q = search.toLowerCase();
+        rows = rows.filter(r => 
+          String(r.name || '').toLowerCase().includes(q) || 
+          String(r.id || '').toLowerCase().includes(q)
+        );
+      }
+      return rows;
+    }
+
+    // Debug: log sample row structure
+    function debugLogSample() {
+      if (allRows.length > 0) {
+        console.log('Sample row keys:', Object.keys(allRows[0]));
+        console.log('Sample row:', allRows[0]);
+      }
+    }
+
+    function applySorting(rows) {
+      const dir = sortDir === 'asc' ? 1 : -1;
+      return rows.slice().sort((a, b) => {
+        let av = a[sortKey], bv = b[sortKey];
+        if (typeof av === 'string') { av = av.toLowerCase(); bv = (bv || '').toLowerCase(); }
+        if (av < bv) return -1 * dir;
+        if (av > bv) return 1 * dir;
+        return 0;
+      });
+    }
+
+    function fmtPct(n) { return (n||0).toFixed(1)+'%'; }
+    function fmtNum(n) { return Math.round(n||0).toLocaleString(); }
+
+    function renderStats() {
+      const rows = getFilteredRows();
+      const topCount = Math.min(5, rows.length);
+      const bottomCount = Math.min(5, rows.length);
+      const avgSuccess = rows.length ? rows.reduce((a,r)=>a+(r.deliverySuccessRate||0),0)/rows.length : 0;
+      const avgAttendance = rows.length ? rows.reduce((a,r)=>a+(r.attendanceRate||0),0)/rows.length : 0;
+      const totalDelivered = rows.reduce((a,r)=>a+(r.parcelsDelivered||0),0);
+      
+      const stats = [
+        { label: 'Active Riders', value: rows.length, cls: '' },
+        { label: 'Avg Delivery Success', value: fmtPct(avgSuccess), cls: avgSuccess >= 90 ? 'teal' : (avgSuccess < 75 ? 'brick' : '') },
+        { label: 'Avg Attendance', value: fmtPct(avgAttendance), cls: '' },
+        { label: 'Total Delivered', value: fmtNum(totalDelivered), cls: 'amber' },
+      ];
+      statsRowEl.innerHTML = stats.map((s, idx) => `
+        <div class="stat-card">
+          <div class="stat-label">${s.label}</div>
+          <div class="stat-value ${s.cls}">${s.value}</div>
+        </div>
+      `).join('');
+    }
+
+    function getRankClass(rank) {
+      if (rank === 1) return 'rank-1';
+      if (rank === 2) return 'rank-2';
+      if (rank === 3) return 'rank-3';
+      return 'rank-other';
+    }
+
+    function renderRows() {
+      let rows = getFilteredRows();
+      rows = applySorting(rows);
+      
+      if (!rows.length) {
+        rowsEl.innerHTML = '<tr><td colspan="10" class="muted">No rider records found for this hub.</td></tr>';
+        return;
+      }
+
+      // Add rank and performance indicator
+      const rowsWithRank = rows.map((r, idx) => ({
+        ...r,
+        _rank: idx + 1,
+        _isTop: idx < 5,
+        _isBottom: idx >= rows.length - 5
+      }));
+
+      rowsEl.innerHTML = rowsWithRank.map(r => {
+        const rankClass = getRankClass(r._rank);
+        const perfClass = r._isTop ? 'perf-top' : (r._isBottom ? 'perf-bottom' : '');
+        const perfLabel = r._isTop ? 'Top' : (r._isBottom ? 'Bottom' : '');
+        return `
+          <tr>
+            <td><span class="rank-badge ${rankClass}">${r._rank}</span></td>
+            <td style="font-weight:600;">${escapeHtml(r.name)}</td>
+            <td><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;background:var(--hover);padding:1px 6px;border-radius:4px;">${escapeHtml(r.id)}</span></td>
+            <td><span style="background:rgba(232,163,61,.12);color:var(--amber-deep);padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;">${escapeHtml(r.hub || 'N/A')}</span></td>
+            <td>${escapeHtml(r.vehicleType || 'N/A')}</td>
+            <td class="num">${fmtNum(r.daysWorking)}</td>
+            <td class="num">${(r.avgParcelsPerDay||0).toFixed(1)}</td>
+            <td class="num ${r.deliverySuccessRate >= 90 ? 'rate-green' : (r.deliverySuccessRate >= 80 ? 'rate-yellow' : (r.deliverySuccessRate >= 70 ? 'rate-orange' : (r.deliverySuccessRate >= 60 ? 'rate-bright-red' : 'rate-dark-red')))}">${fmtPct(r.deliverySuccessRate)}</td>
+            <td class="num">${fmtPct(r.attendanceRate)}</td>
+            <td class="num">${fmtNum(r.parcelsDelivered)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&','<':'<','>':'>','"':'"',"'":"'"}[c])); }
+
+    // Table header sorting
+    const sortableHeaders = document.querySelectorAll('th');
+    sortableHeaders.forEach(th => {
+      th.addEventListener('click', () => {
+        const key = th.getAttribute('data-sort') || th.textContent.trim().toLowerCase().replace(/\s+/g, '');
+        const keyMap = {
+          'rank': '_rank',
+          'rider name': 'name',
+          'driver id': 'id',
+          'hub': 'hub',
+          'vehicle': 'vehicleType',
+          'days working': 'daysWorking',
+          'parcels/day': 'avgParcelsPerDay',
+          'delivery success': 'deliverySuccessRate',
+          'attendance': 'attendanceRate',
+          'parcels delivered': 'parcelsDelivered'
+        };
+        const sortKeyMapped = keyMap[key] || key;
+        if (sortKey === sortKeyMapped) { sortDir = sortDir === 'asc' ? 'desc' : 'asc'; }
+        else { sortKey = sortKeyMapped; sortDir = 'desc'; }
+        renderRows();
+      });
+    });
+
+    if (typeof window.applySavedTheme === 'function') window.applySavedTheme();
+
+    searchEl.addEventListener('input', e => { search = e.target.value; renderRows(); });
+
+    (async function start(){
+      const hubs = await window.Auth.getHubs();
+      buildHubTabs(hubs);
+      applyHubFilter();
+      await loadData();
+
+      if (window.Auth && typeof window.Auth.onHubsChange === 'function') {
+        try {
+          window.Auth.onHubsChange(newHubs => {
+            buildHubTabs(newHubs);
+            applyHubFilter();
+            loadData();
+          });
+        } catch (e) { /* ignore */ }
+      }
+    })();
+
+    setInterval(async function(){
+      if(document.hidden) return;
+      await loadData();
+    }, 30000);
+  </script>
+
+  <!-- Shared Option Button / Options drawer (appears on all pages) -->
+  <script src="options-drawer.js" defer></script>
+</body>
+</html>
