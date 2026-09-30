@@ -1,22 +1,27 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Riders DTR — Time-In Tracker</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://docs.google.com">
+<link rel="dns-prefetch" href="https://firestore.googleapis.com">
+<link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <!-- PapaParse for Client-Side CSV Parsing -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <script src="firebase-config.js"></script>
+<script src="sw-register.js" defer></script>
   <script type="module" src="auth.js"></script>
   <style>
     body{padding:0;margin:0;}
     .page-shell{max-width:1280px;margin:0 auto;padding:28px;}
     .page-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;}
-    .page-head h1{font-family:'Space Grotesk',sans-serif;font-size:24px;margin:0;}
+    .page-head h1{font-family:'Space Grotesk',sans-serif;font-size:24px;margin:0;position:relative;padding-bottom:10px;}
+    .page-head h1::after{content:'';position:absolute;left:0;bottom:0;width:56px;height:3px;border-radius:999px;background:var(--grad-brand);}
     .page-head p{margin:4px 0 0;color:var(--text-dim);font-size:13px;}
     .page-actions{display:flex;align-items:center;gap:10px;}
     .status-box{background:var(--card);border:1px solid var(--line-2);border-radius:6px;padding:12px 14px;font-size:13px;color:var(--text-dim);}
@@ -32,12 +37,12 @@
     .stat-value.brick{color:var(--brick);}
     .stat-value.amber{color:var(--amber-deep);}
     .hub-filter{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--card);font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:18px;color:var(--text);cursor:pointer;text-align:center;transition:border-color .2s ease,box-shadow .2s ease;}
-    .hub-filter:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 3px rgba(232,163,61,.15);}
+    .hub-filter:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 3px rgba(238,77,45,.15);}
     .search-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
     .search-row input{flex:1;min-width:180px;padding:9px 12px;border:1px solid var(--line);border-radius:3px;font-family:'IBM Plex Sans';font-size:13px;background:var(--card);color:var(--text);transition:border-color .2s ease,box-shadow .2s ease;}
-    .search-row input:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 3px rgba(232,163,61,.15);}
+    .search-row input:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 3px rgba(238,77,45,.15);}
     .search-row select{padding:9px 10px;border:1px solid var(--line);border-radius:3px;font-size:13px;background:var(--card);font-family:'IBM Plex Sans';cursor:pointer;transition:border-color .2s ease,box-shadow .2s ease;}
-    .search-row select:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 3px rgba(232,163,61,.15);}
+    .search-row select:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 3px rgba(238,77,45,.15);}
     .upload-fab{
       position:fixed;top:16px;right:16px;z-index:1000;
       width:56px;height:56px;border:none;border-radius:50%;
@@ -65,16 +70,16 @@
     .time-badge{
       display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:999px;
       font-size:12px;font-weight:600;font-family:'IBM Plex Mono',monospace;
-      background:rgba(63,143,109,.1);color:var(--teal);
+      background:rgba(0,201,120,.12);color:var(--teal);
     }
     .parcel-badge{
       display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:999px;
       font-size:12px;font-weight:600;font-family:'IBM Plex Mono',monospace;
-      background:rgba(232,163,61,.12);color:var(--amber-deep);
+      background:rgba(238,77,45,.12);color:var(--amber-deep);
     }
     .station-badge{
       display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:999px;
-      font-size:11px;font-weight:600;background:rgba(91,100,110,.1);color:var(--slate);
+      font-size:11px;font-weight:600;background:rgba(122,128,138,.14);color:var(--slate);
     }
     .driver-id-badge{
       display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;
@@ -95,20 +100,20 @@
     .top-riders-box .rider-name{flex:1;font-weight:600;color:var(--text);}
     .top-riders-box .rider-id{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-dim);background:var(--hover);padding:1px 6px;border-radius:4px;}
     .top-riders-box .rider-time{font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;border-radius:999px;padding:2px 8px;}
-    .rider-time.early{background:rgba(63,143,109,.12);color:var(--teal);}
-    .rider-time.target{background:rgba(232,163,61,.12);color:var(--amber-deep);}
-    .rider-time.late{background:rgba(232,113,106,.12);color:var(--brick);}
+    .rider-time.early{background:rgba(0,201,120,.14);color:var(--teal);}
+    .rider-time.target{background:rgba(238,77,45,.12);color:var(--amber-deep);}
+    .rider-time.late{background:rgba(255,107,107,.14);color:var(--brick);}
     .top-riders-box .empty{color:var(--text-dim);font-size:12px;text-align:center;padding:8px 0;}
   </style>
 </head>
-<body>
+<body class="dark">
   <div class="page-shell">
     <div class="page-head">
       <div>
         <h1>Riders DTR</h1>
       </div>
       <div class="page-actions">
-        <a class="back-link" href="index.html">← Back to Rider Performance System</a>
+        <a class="back-link" href="index.html">? Back to Rider Performance System</a>
         <div class="status-box" id="uploadStatus">No file selected</div>
       </div>
     </div>
@@ -194,8 +199,14 @@
   </div>
 
   <script type="module">
-    import { doc, setDoc, getDoc, getDocs, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { doc, setDoc, getDoc, getDocs, collection, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
+    if (!window.Auth) {
+      // auth.js failed to load — say so instead of leaving the page empty.
+      const el = document.getElementById('uploadStatus');
+      if (el) el.textContent = 'Could not start — the authentication module failed to load. Please refresh the page.';
+      throw new Error('auth unavailable');
+    }
     const __perms = await window.Auth.guard('dtr');
     if (!__perms) throw new Error('redirect');
 
@@ -297,7 +308,16 @@
           }
 
           console.log('DTR SAVE: docId:', docId, 'existing+new merged rows:', mergedData.length);
-          await setDoc(docRef, { content: JSON.stringify(mergedData), updated: new Date().toISOString() }, { merge: true });
+          // `kind` lets the reader query only DTR docs instead of downloading
+          // the whole dispatch_data collection. Old docs without it are still
+          // picked up by the fallback scan in loadDtrData().
+          await setDoc(docRef, {
+            content: JSON.stringify(mergedData),
+            updated: new Date().toISOString(),
+            kind: 'dtr',
+            hub: hubName,
+            date: dateStr
+          }, { merge: true });
         }
         return true;
       } catch (err) {
@@ -307,24 +327,109 @@
       }
     }
 
+    // The cheap `where('kind','==','dtr')` query can be refused by Firestore
+    // security rules, and records saved before the `kind` tag existed are
+    // invisible to it. So the full collection scan is the source of truth and
+    // the filtered query is only a shortcut — never the other way round.
+    const FILTER_BLOCKED_KEY = 'dtr-filtered-query-blocked';
+    const DTR_CACHE_KEY = 'dtr-rows-cache-v1';
+    const DTR_CACHE_MAX = 4000000;
+
+    function readDtrCache() {
+      try {
+        const raw = localStorage.getItem(DTR_CACHE_KEY);
+        if (!raw) return null;
+        const entry = JSON.parse(raw);
+        if (!entry || !Array.isArray(entry.rows) || !entry.rows.length) return null;
+        return entry;
+      } catch (e) { return null; }
+    }
+
+    function writeDtrCache(rows) {
+      try {
+        const payload = JSON.stringify({ t: Date.now(), rows: rows });
+        if (payload.length > DTR_CACHE_MAX) return;
+        localStorage.setItem(DTR_CACHE_KEY, payload);
+      } catch (e) { /* cache is best-effort */ }
+    }
+
+    function renderRows(rows, message) {
+      globalRawData = rows;
+      populateDateDropdown(rows);
+      populateHubDropdown(rows);
+      filterAndRender();
+      if (message) uploadStatusEl.textContent = message;
+    }
+
     async function loadDtrData() {
+      const statusEl = document.getElementById('uploadStatus');
+
+      // Paint from the last known good copy straight away, then refresh.
+      const cached = readDtrCache();
+      if (cached) {
+        renderRows(cached.rows, 'Loaded ' + cached.rows.length + ' rider records from cache — refreshing…');
+      }
+
       if (!firebaseEnabled()) {
-        console.log('DTR LOAD: firebaseEnabled() returned false');
+        statusEl.innerHTML = cached
+          ? '<span class="muted">Firebase is not configured — showing cached records only.</span>'
+          : '<span class="error">Firebase is not configured, so DTR records cannot be loaded.</span>';
         return;
       }
-      console.log('DTR LOAD: starting...');
       try {
-        const snapshot = await getDocs(collection(window.Auth.db, 'dispatch_data'));
-        console.log('DTR LOAD: got snapshot with', snapshot.size, 'docs');
+        const docs = new Map();
+        let mode = 'filtered';
+
+        // 1. Shortcut: only the documents tagged with kind:'dtr'.
+        let filterBlocked = false;
+        try { filterBlocked = sessionStorage.getItem(FILTER_BLOCKED_KEY) === '1'; } catch (e) { /* ignore */ }
+        if (!filterBlocked) {
+          try {
+            const tagged = await getDocs(query(window.Auth.db, 'dispatch_data', where('kind', '==', 'dtr')));
+            tagged.forEach(d => { if (d.id.startsWith('dtr_')) docs.set(d.id, d.data()); });
+          } catch (e) {
+            // Rules that don't permit filtered lists reject this query. Stop
+            // retrying it and fall through to the full scan below.
+            mode = 'fullscan';
+            console.warn('DTR LOAD: filtered query not permitted, using a full scan.', e);
+            try { sessionStorage.setItem(FILTER_BLOCKED_KEY, '1'); } catch (err) { /* ignore */ }
+          }
+        } else {
+          mode = 'fullscan';
+        }
+
+        // 2. Source of truth. Runs whenever the shortcut came back empty, so
+        //    untagged legacy records can never be hidden by a stale cache flag.
+        let untagged = [];
+        if (docs.size === 0) {
+          mode = 'fullscan';
+          const all = await getDocs(collection(window.Auth.db, 'dispatch_data'));
+          const untaggedData = [];
+          all.forEach(d => {
+            if (!d.id.startsWith('dtr_')) return;
+            const data = d.data();
+            if (!data || !data.content) return;
+            docs.set(d.id, data);
+            if (data.kind !== 'dtr') untaggedData.push({ ref: d.ref, id: d.id });
+          });
+          untagged = untaggedData;
+          // Tag the untagged records so future loads can use the shortcut.
+          // `content` is never touched. This is best-effort and deliberately
+          // not awaited, so a slow write can never hold up the first paint.
+          if (untagged.length) {
+            console.log('DTR LOAD: tagging', untagged.length, 'legacy document(s)');
+            untagged.slice(0, 20).forEach(u => {
+              setDoc(u.ref, { kind: 'dtr' }, { merge: true })
+                .catch(e => console.warn('DTR LOAD: could not tag legacy doc', u.id, e));
+            });
+          }
+        }
+
         const allRows = [];
-        snapshot.forEach(docSnap => {
-          if (!docSnap.id.startsWith('dtr_')) return;
-          const data = docSnap.data();
-          console.log('DTR LOAD: doc', docSnap.id, 'has content:', !!(data && data.content));
+        docs.forEach((data, docId) => {
           if (!data || !data.content) return;
           try {
             const parsed = JSON.parse(data.content);
-            console.log('DTR LOAD: parsed type:', Array.isArray(parsed) ? 'array' : typeof parsed, 'length:', Array.isArray(parsed) ? parsed.length : 'N/A');
             if (Array.isArray(parsed)) {
               parsed.forEach(row => allRows.push(row));
             } else if (parsed && typeof parsed === 'object') {
@@ -333,24 +438,32 @@
               });
             }
           } catch (e) {
-            console.warn('DTR LOAD: Failed to parse DTR doc:', docSnap.id, e);
+            console.warn('DTR LOAD: Failed to parse DTR doc:', docId, e);
           }
         });
 
-        console.log('DTR LOAD: total rows loaded:', allRows.length);
         if (allRows.length > 0) {
-          console.log('DTR LOAD: first row sample:', JSON.stringify(allRows[0]));
-          allRows.sort((a, b) => new Date(a.rawTime || a.date) - new Date(b.rawTime || b.date));
-          globalRawData = allRows;
-          populateDateDropdown(allRows);
-          populateHubDropdown(allRows);
-          filterAndRender();
-          uploadStatusEl.textContent = 'Loaded ' + allRows.length + ' rider records from Firebase';
+          allRows.sort((a, b) => new Date(a.rawTime || a.date) - new Date(b.rawTime || a.date));
+          writeDtrCache(allRows);
+          renderRows(allRows, 'Loaded ' + allRows.length + ' rider records (from ' + docs.size +
+            ' documents, ' + mode + ')');
+        } else if (cached) {
+          // The network read came back empty or failed midway — keep what we
+          // already painted rather than blanking the table.
+          statusEl.innerHTML = '<span class="error">No DTR records came back from Firebase (' +
+            docs.size + ' DTR document(s) read via ' + mode + '). Showing the last known copy — reload to retry.</span>';
         } else {
-          console.log('DTR LOAD: no rows found, globalRawData stays empty');
+          renderRows([], null);
+          console.warn('[DTR] no rider rows. documents=' + docs.size + ' mode=' + mode);
+          statusEl.innerHTML = '<span class="error">No DTR records in Firebase (' + docs.size +
+            ' DTR document(s) read via ' + mode + '). Upload a DTR CSV file to add records.</span>';
         }
       } catch (err) {
         console.error('DTR LOAD error:', err);
+        const detail = err && err.message ? err.message : 'unknown error';
+        statusEl.innerHTML = cached
+          ? '<span class="error">Could not refresh DTR records (' + detail + '). Showing the last known copy — reload to retry.</span>'
+          : '<span class="error">Could not load DTR records: ' + detail + '</span>';
       }
     }
 
@@ -497,6 +610,18 @@
 
       renderRiderData(filtered);
       renderTopRiders(filtered);
+
+      // Records loaded but nothing on screen: the date/hub filter is excluding
+      // everything. Say so, and fall back to showing everything.
+      if (globalRawData.length > 0 && filtered.length === 0) {
+        uploadStatusEl.innerHTML = '<span class="muted">' + globalRawData.length +
+          ' records loaded, but none match the selected date/hub — showing all records.</span>';
+        dateSelect.value = 'ALL';
+        hubSelect.value = 'ALL';
+        const all = globalRawData.filter(item => item && item.date && item.station);
+        renderRiderData(all);
+        renderTopRiders(all);
+      }
     }
 
     function renderTopRiders(data) {

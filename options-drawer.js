@@ -37,9 +37,9 @@
   }
 
   function applyTheme(mode) {
-    var isDark = mode === 'dark' ||
-      (mode === null && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    var isDark = mode !== 'light';
     document.body.classList.toggle('dark', isDark);
+    document.body.classList.toggle('light', !isDark);
     var pill = document.getElementById('optThemeState');
     if (pill) pill.textContent = isDark ? 'On' : 'Off';
   }
@@ -130,10 +130,7 @@
     // The wheel button is styled as a 56px circle in styles.css
     var btn = document.getElementById('optSettingsToggle');
     if (btn) {
-      btn.style.boxShadow = '0 6px 18px rgba(0,0,0,.25)';
-      btn.style.background = 'var(--ink)';
-      btn.style.color = '#F5F6F1';
-      btn.style.borderColor = '#3A4150';
+      btn.classList.add('opt-fab');
     }
   }
 
@@ -389,7 +386,6 @@ function wireEvents() {
 
   window.getSavedTheme = getSavedTheme;
   window.applySavedTheme = function() {
-    var isDark = getSavedTheme() === 'dark' || (getSavedTheme() === null && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    document.body.classList.toggle('dark', isDark);
+    applyTheme(getSavedTheme());
   };
 })();

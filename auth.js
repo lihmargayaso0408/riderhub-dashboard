@@ -6,13 +6,14 @@ import {
   createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import {
-  getFirestore, doc, getDoc, setDoc, updateDoc, addDoc,
+  doc, getDoc, setDoc, updateDoc, addDoc,
   collection, query, where, getDocs, serverTimestamp, onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getSharedDb } from "./firestore-setup.js";
 
 const app = getApps().length ? getApps()[0] : initializeApp(window.FIREBASE_CONFIG);
 const auth = getAuth(app);
-const db = getFirestore(app);
+const db = getSharedDb(app);
 
 const ALL_HUBS = ['Bauko', 'Buguias', 'Irisan', 'Itogon', 'Itogon Tuding', 'Kapangan', 'La Trinidad Pico', 'MB Atok'];
 const REMOVED_HUBS = ['MB Mankayan'];
@@ -133,9 +134,12 @@ const Auth = {
       return null;
     }
     try {
-      await user.getIdToken(true);
+      // No forced refresh: the SDK reuses a valid cached token, which saves a
+      // network round trip on every page load. Firestore rules still reject
+      // reads if the account was actually revoked.
+      await user.getIdToken();
     } catch (e) {
-      console.error('Token refresh failed in guard:', e);
+      console.error('Token check failed in guard:', e);
     }
     return profile;
   },
@@ -175,10 +179,28 @@ const Auth = {
 
   HUB_FALLBACK: sortHubs(ALL_HUBS),
 
+  // The hub list is read several times per page load (guard, dashboard init,
+  // seeding). Share one in-flight request and a short-lived memory cache so a
+  // slow connection only pays for a single round trip.
+  _hubsPromise: null,
+  _hubsCache: null,
+  _hubsCachedAt: 0,
+
   // Returns the canonical hub list (case-insensitive, deterministic order).
   // Reads from Firestore `hubs` collection; falls back to ALL_HUBS when
   // Firebase is unavailable or the collection is empty.
   async getHubs() {
+    if (Auth._hubsCache && Date.now() - Auth._hubsCachedAt < 30000) return Auth._hubsCache;
+    if (!Auth._hubsPromise) {
+      Auth._hubsPromise = Auth._readHubs().finally(() => { Auth._hubsPromise = null; });
+    }
+    const hubs = await Auth._hubsPromise;
+    Auth._hubsCache = hubs;
+    Auth._hubsCachedAt = Date.now();
+    return hubs;
+  },
+
+  async _readHubs() {
     try {
       const snap = await getDocs(collection(db, 'hubs'));
       const names = snap.docs
@@ -227,7 +249,10 @@ const Auth = {
     const trimmed = String(name || '').trim();
     if (!trimmed) throw new Error('Hub name is required.');
     if (!isHubActive(trimmed)) throw new Error('This hub is no longer available.');
-    // Reject duplicates against the current merged list (case-insensitive).
+    // Duplicate check always reads fresh data, never the 30s cache — otherwise
+    // two admins adding the same hub in quick succession both pass the check.
+    Auth._hubsCache = null;
+    Auth._hubsCachedAt = 0;
     const existing = await this.getHubs();
     if (existing.some(h => h.toLowerCase() === trimmed.toLowerCase())) {
       throw new Error('A hub named "' + trimmed + '" already exists.');
@@ -237,13 +262,18 @@ const Auth = {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
+    // Drop the cache again so the next getHubs() sees the hub we just wrote.
+    Auth._hubsCache = null;
+    Auth._hubsCachedAt = 0;
     return trimmed;
   },
 
   // Seed the `hubs` collection with the hardcoded defaults if it's empty.
-  // Safe to call on every page load — only writes when collection is empty.
+  // Safe to call on every page load — reuses the shared hubs request and only
+  // writes when the collection is actually empty.
   async seedHubsIfEmpty() {
     try {
+      await Auth.getHubs(); // warms the shared read / cache
       const snap = await getDocs(collection(db, 'hubs'));
       if (snap.size > 0) return;
       const batch = [];

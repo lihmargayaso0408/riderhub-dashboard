@@ -1,9 +1,10 @@
 // firebase-client.js
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { doc, setDoc, getDoc, deleteDoc, collection, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getSharedDb } from "./firestore-setup.js";
 
 const app = getApps().length ? getApps()[0] : initializeApp(window.FIREBASE_CONFIG);
-const db = getFirestore(app);
+const db = getSharedDb(app);
 
 window.firebaseAPI = {
   isEnabled: () => !!window.FIREBASE_CONFIG.apiKey,

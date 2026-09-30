@@ -1,3 +1,5 @@
+import { cachedFetchText } from './data-cache.js';
+
 (function(){
   "use strict";
 
@@ -306,22 +308,24 @@ function getExportDates(hub){
   function loadTheme(){
     try{
       const saved = localStorage.getItem(THEME_KEY);
-      return saved ? JSON.parse(saved) : 'light';
-    }catch(e){ return 'light'; }
+      return saved ? JSON.parse(saved) : 'dark';
+    }catch(e){ return 'dark'; }
   }
   function saveTheme(mode){ try{ localStorage.setItem(THEME_KEY, JSON.stringify(mode)); }catch(e){} }
   function applyTheme(mode){
-    document.body.classList.toggle('dark', mode==='dark');
+    const isDark = mode !== 'light';
+    document.body.classList.toggle('dark', isDark);
+    document.body.classList.toggle('light', !isDark);
     const themeState = $('#themeToggleState');
-    if(themeState){ themeState.textContent = mode==='dark' ? 'On' : 'Off'; }
+    if(themeState){ themeState.textContent = isDark ? 'On' : 'Off'; }
     const settingsToggle = $('#settingsToggle');
-    if(settingsToggle){ settingsToggle.setAttribute('aria-label', mode==='dark' ? 'Open options (dark mode)' : 'Open options'); }
+    if(settingsToggle){ settingsToggle.setAttribute('aria-label', isDark ? 'Open options (dark mode)' : 'Open options'); }
   }
   function chartColors(){
     const cs = getComputedStyle(document.body);
     return {
-      text: cs.getPropertyValue('--text-dim').trim() || '#6B7280',
-      grid: cs.getPropertyValue('--line-2').trim() || '#E9EAE4',
+      text: cs.getPropertyValue('--text-dim').trim() || '#8B9099',
+      grid: cs.getPropertyValue('--line-2').trim() || '#1F232B',
     };
   }
 
@@ -376,6 +380,9 @@ function fmtWeekLabel(d){
 
   async function init(){
     try {
+      if(!window.Auth || typeof window.Auth.guard !== 'function'){
+        throw new Error('The authentication module (auth.js) failed to load. Please refresh the page.');
+      }
       const perms = await window.Auth.guard();
       if(!perms) return; // redirected to login
       state.perms = perms;
@@ -410,12 +417,32 @@ function fmtWeekLabel(d){
       });
       const theme = await loadTheme();
       applyTheme(theme);
-      state.hubIndex = await getIndex();
-      for (const hub of HUB_FALLBACK) {
-        state.summaries[hub] = await getSummary(hub);
-      }
-      areaLookup = await buildAreaLookup();
-      pnrLookup = await buildPnrLookup();
+
+      // Hub index + every hub summary are independent reads — fetch them all
+      // at once instead of one round trip after another.
+      const hubsToLoad = HUB_FALLBACK;
+      const [index, ...summaries] = await Promise.all([
+        getIndex(),
+        ...hubsToLoad.map(hub => getSummary(hub))
+      ]);
+      state.hubIndex = index;
+      hubsToLoad.forEach((hub, i) => { state.summaries[hub] = summaries[i]; });
+
+      // The riders-area and PNR sheets are only needed for enrichment, so they
+      // load in the background and never block the first paint.
+      Promise.all([buildAreaLookup(), buildPnrLookup()])
+        .then(([areas, pnr]) => {
+          areaLookup = areas;
+          pnrLookup = pnr;
+          enrichmentDone = true;
+          // Repaint once with Area/PNR filled in — no extra network cost.
+          if (state.rows && state.rows.length && (areas.size || pnr.size)) {
+            applyEnrichment(state.rows);
+            renderContent().catch(() => {});
+          }
+        })
+        .catch(() => { enrichmentDone = true; });
+
       applyAccessControl(perms);
       await refreshView();
       wireStaticEvents();
@@ -459,11 +486,9 @@ function fmtWeekLabel(d){
           isRefreshing = true;
           state.hubIndex = await getIndex();
           const hubs = currentHubs();
-          hubs.forEach(h => { state.summaries[h] = (state.summaries[h]||[]); });
-          // Refresh summaries for all known hubs
-          for (const h of hubs) {
-            state.summaries[h] = await getSummary(h);
-          }
+          // Refresh summaries for all known hubs (in parallel)
+          const fresh = await Promise.all(hubs.map(h => getSummary(h)));
+          hubs.forEach((h, i) => { state.summaries[h] = fresh[i]; });
           await refreshView();
           showToast('Dashboard updated automatically');
         } catch(e) {
@@ -483,9 +508,8 @@ function fmtWeekLabel(d){
           isRefreshing = true;
           state.hubIndex = newIndex;
           const hubs = currentHubs();
-          for (const h of hubs) {
-            state.summaries[h] = await getSummary(h);
-          }
+          const fresh = await Promise.all(hubs.map(h => getSummary(h)));
+          hubs.forEach((h, i) => { state.summaries[h] = fresh[i]; });
           await refreshView();
           showToast('Dashboard updated automatically');
         }
@@ -494,7 +518,7 @@ function fmtWeekLabel(d){
       } finally {
         isRefreshing = false;
       }
-    }, 15000);
+    }, 45000);
   }
 
   function stopAutoRefresh(){
@@ -923,15 +947,17 @@ function allowedHubs(){
 
      let rows = [];
      if(state.currentHub==='All'){
-       for(const hub of allowedHubs()){
-         const hd = state.hubIndex[hub]||[];
-         const snapDate = resolveSnapshotDate(hub, state.currentDate);
-         const useDate = snapDate && hd.includes(snapDate) ? snapDate : latestDate(hd);
-         if(useDate){
-           const snap = await loadSnapshot(hub, useDate);
-           if(snap) rows = rows.concat(snap.rows.map(r=>Object.assign({},r,{hub, snapDate:useDate})));
-         }
-       }
+        // One snapshot per hub, all in parallel — on a slow link this is the
+        // difference between N sequential round trips and a single wait.
+        const parts = await Promise.all(allowedHubs().map(async hub => {
+          const hd = state.hubIndex[hub]||[];
+          const snapDate = resolveSnapshotDate(hub, state.currentDate);
+          const useDate = snapDate && hd.includes(snapDate) ? snapDate : latestDate(hd);
+          if(!useDate) return [];
+          const snap = await loadSnapshot(hub, useDate);
+          return snap ? snap.rows.map(r=>Object.assign({},r,{hub, snapDate:useDate})) : [];
+        }));
+        parts.forEach(part => { rows = rows.concat(part); });
      } else {
        const hd = state.hubIndex[state.currentHub]||[];
        const snapDate = resolveSnapshotDate(state.currentHub, state.currentDate);
@@ -941,9 +967,24 @@ function allowedHubs(){
          if(snap) rows = snap.rows.map(r=>Object.assign({},r,{hub:state.currentHub, snapDate:useDate}));
        }
      }
-     state.rows = rows;
-     rows.forEach(r => { r.attendanceRate = Math.min((r.daysWorking || 0) / 7, 1) * 100; });
+    state.rows = rows;
+    rows.forEach(r => { r.attendanceRate = Math.min((r.daysWorking || 0) / 7, 1) * 100; });
 
+    applyEnrichment(rows);
+
+    $('#viewSub').textContent = state.currentHub==='All'
+      ? 'Record from last week'
+      : `Snapshot for ${fmtDate(state.currentDate)}`;
+
+    await renderContent();
+    updateLastUpdatedNote();
+  }
+
+  // Fill in Area (Riders & Agency sheet) and PNR counts (PNR sheet).
+  // Runs after the first paint too, so the table updates in place when the
+  // sheets finish loading instead of blocking the initial render.
+  function applyEnrichment(rows){
+    if(!rows || !rows.length) return;
     // Populate the Area from the Riders & Agency sheet by matching rider name
     if(areaLookup && areaLookup.size){
       rows.forEach(r => {
@@ -954,7 +995,7 @@ function allowedHubs(){
       });
     }
 
-// Populate the PNR count from the PNR Google Sheet by matching rider name + hub + week
+    // Populate the PNR count from the PNR Google Sheet by matching rider name + hub + week
     if(pnrLookup && pnrLookup.size){
       rows.forEach(r => {
         const weekKey = (r.snapDate || '');
@@ -967,13 +1008,6 @@ function allowedHubs(){
         }
       });
     }
-
-    $('#viewSub').textContent = state.currentHub==='All'
-      ? 'Record from last week'
-      : `Snapshot for ${fmtDate(state.currentDate)}`;
-
-    await renderContent();
-    updateLastUpdatedNote();
   }
 
 function updateLastUpdatedNote(){
@@ -1569,36 +1603,38 @@ const riders = {
 // Lookup of rider name -> Area, built from the Riders & Agency Google Sheet
   let areaLookup = new Map();
 
-// Lookup of rider name+hub -> PNR count, built from the PNR Google Sheet
+  // Lookup of rider name+hub -> PNR count, built from the PNR Google Sheet
   let pnrLookup = new Map();
+
+  // True once the background sheet enrichment has finished (or failed).
+  let enrichmentDone = false;
 
   // Lookup of rider name+hub+week -> not-solved PNR count, built from the PNR Google Sheet
   let notSolvedPnrMap = new Map();
 
-async function buildAreaLookup(){
+  async function buildAreaLookup(){
      const map = new Map();
      const hubs = currentHubs();
-     for(const hub of hubs){
+     // Fetch every hub sheet at the same time instead of one after another.
+     await Promise.all(hubs.map(async hub => {
        try{
          const sheetName = RIDERS_HUB_SHEET[hub] || hub;
         const url = `https://docs.google.com/spreadsheets/d/${RIDERS_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
-        const response = await fetch(url);
-        if(!response.ok) continue;
-        const text = await response.text();
+        const text = await cachedFetchText(url);
         const rawLines = text.split(/\r\n|\n|\r/);
-        if(rawLines.length < 2) continue;
+        if(rawLines.length < 2) return;
         const parsedLines = rawLines.map(parseSheetCsvLine);
         const headerRowIndex = parsedLines.findIndex(values => {
           const normalized = values.map(v => String(v||'').trim().toLowerCase());
           return normalized.some(h=>['rider name','rider','driver name','driver','name'].includes(h))
             && normalized.some(h=>['area','location'].includes(h));
         });
-        if(headerRowIndex < 0) continue;
+        if(headerRowIndex < 0) return;
         const headers = parsedLines[headerRowIndex];
         const normalizedHeaders = headers.map(h => String(h||'').trim().toLowerCase());
         const nameIdx = findSheetHeaderIndex(normalizedHeaders, ['rider name','rider','driver name','driver','name']);
         const areaIdx = findSheetHeaderIndex(normalizedHeaders, ['area','location']);
-        if(nameIdx < 0 || areaIdx < 0) continue;
+        if(nameIdx < 0 || areaIdx < 0) return;
         for(let i=headerRowIndex+1;i<parsedLines.length;i++){
           const values = parsedLines[i];
           if(values.some(c => String(c||'').trim() !== '')){
@@ -1608,7 +1644,7 @@ async function buildAreaLookup(){
           }
         }
       }catch(e){ /* ignore sheet errors */ }
-    }
+     }));
 return map;
   }
 
@@ -1617,9 +1653,7 @@ return map;
     const map = new Map();
     try{
       const url = `https://docs.google.com/spreadsheets/d/${PNR_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(PNR_SHEET_NAME)}`;
-      const response = await fetch(url);
-      if(!response.ok) return map;
-      const text = await response.text();
+      const text = await cachedFetchText(url);
       const rawLines = text.split(/\r\n|\n|\r/);
       if(rawLines.length < 2) return map;
       const parsedLines = rawLines.map(parseSheetCsvLine);
@@ -1708,9 +1742,7 @@ function escapeHtml2(s){
     try{
       const sheetName = RIDERS_HUB_SHEET[riders.currentHub] || RIDERS_HUB_SHEET.Buguias;
       const url = `https://docs.google.com/spreadsheets/d/${RIDERS_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
-      const response = await fetch(url);
-      if(!response.ok) throw new Error('Unable to fetch sheet');
-      const text = await response.text();
+      const text = await cachedFetchText(url);
       const rawLines = text.split(/\r\n|\n|\r/);
       if(rawLines.length < 2) throw new Error('No rows found in sheet');
 

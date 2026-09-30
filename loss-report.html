@@ -4,17 +4,22 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Loss Report per Hub</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://docs.google.com">
+<link rel="dns-prefetch" href="https://firestore.googleapis.com">
+<link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <script src="firebase-config.js"></script>
+<script src="sw-register.js" defer></script>
     <script type="module" src="auth.js"></script>
     <style>
     body{padding:0;margin:0;}
     .page-shell{max-width:1440px;margin:0 auto;padding:28px;}
     .page-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;}
-    .page-head h1{font-family:'Space Grotesk',sans-serif;font-size:24px;margin:0;}
+    .page-head h1{font-family:'Space Grotesk',sans-serif;font-size:24px;margin:0;position:relative;padding-bottom:10px;}
+    .page-head h1::after{content:'';position:absolute;left:0;bottom:0;width:56px;height:3px;border-radius:999px;background:var(--grad-brand);}
     .page-head p{margin:4px 0 0;color:var(--text-dim);font-size:13px;}
     .status-box{background:var(--card);border:1px solid var(--line-2);border-radius:6px;padding:12px 14px;font-size:13px;color:var(--text-dim);}
     .page-actions{display:flex;align-items:center;gap:10px;}
@@ -23,7 +28,7 @@
     .tabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
     .tab-btn{border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 12px;border-radius:999px;cursor:pointer;font-size:13px;transition:transform .2s ease,background .15s ease,border-color .15s ease,color .15s ease;}
     .tab-btn:hover{transform:translateY(-2px);}
-    .tab-btn.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+    .tab-btn.active{background:var(--grad-brand);color:var(--on-brand);border-color:transparent;box-shadow:0 4px 14px var(--glow);}
     .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}
     @media (max-width:700px){.stats-row{grid-template-columns:repeat(2,1fr);}}
     .stat-card{background:var(--card);border:1px solid var(--line-2);border-radius:6px;padding:14px;transition:transform .25s cubic-bezier(.22,.61,.36,1),box-shadow .25s ease,border-color .25s ease;}
@@ -49,13 +54,13 @@
     .num{font-family:'IBM Plex Mono',monospace;text-align:right;}
     .money{font-family:'IBM Plex Mono',monospace;text-align:right;font-weight:600;}
 .loss-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;}
-    .loss-Driver{background:rgba(239,68,68,.12);color:#ef4444;}
-    .loss-Hub{background:rgba(232,163,61,.16);color:#c97f1e;}
-    .loss-FM{background:rgba(59,130,246,.14);color:#3b82f6;}
+    .loss-Driver{background:rgba(255,107,107,.14);color:#FF6B6B;}
+    .loss-Hub{background:rgba(238,77,45,.16);color:var(--amber-deep);}
+    .loss-FM{background:rgba(79,168,232,.14);color:#4FA8E8;}
     .status-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;}
-    .status-SOLVED{background:rgba(16,185,129,.16);color:#10b981;}
-    .status-NOTSOLVED{background:rgba(239,68,68,.14);color:#ef4444;}
-    .status-NOSTATUS{background:rgba(59,130,246,.14);color:#3b82f6;}
+    .status-SOLVED{background:rgba(0,200,120,.16);color:#00C878;}
+    .status-NOTSOLVED{background:rgba(255,107,107,.16);color:#FF6B6B;}
+    .status-NOSTATUS{background:rgba(79,168,232,.14);color:#4FA8E8;}
     .animate-in{animation:fadeUp .5s cubic-bezier(.22,.61,.36,1) both;}
     .delay-1{animation-delay:.05s;}
     .delay-2{animation-delay:.1s;}
@@ -63,7 +68,7 @@
     .delay-4{animation-delay:.2s;}
   </style>
 </head>
-<body>
+<body class="dark">
   <div class="page-shell">
     <div class="page-head">
       <div>
@@ -107,7 +112,16 @@
     </div>
   </div>
 
-<script type="module">
+  <script type="module">
+    import { cachedFetchText } from './data-cache.js';
+
+    if (!window.Auth) {
+      // auth.js failed to load. Say so, otherwise the page hangs on
+      // "Loading sheet…" forever with no explanation.
+      document.getElementById('sheetStatus').textContent =
+        'Could not start — the authentication module failed to load. Please refresh the page.';
+      throw new Error('auth unavailable');
+    }
     const __perms = await window.Auth.guard('loss');
     if (!__perms) throw new Error('redirect');
     const LOSS_SHEET_ID = '1Y-Okr8YoWQx-xbylmUHndT-xVTUtHzDP6cejtTOXzEU';
@@ -247,7 +261,7 @@
     }
 
     function escapeHtml(value) {
-      return String(value || '').replace(/[&<>"']/g, match => ({'&':'&amp;','<':'<','>':'>','"':'"',"'":'&#39;'}[match]));
+      return String(value || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
     }
 
     function findHeaderIndex(headers, candidates) {
@@ -298,10 +312,7 @@ const USD_TO_PHP = 56.0; // Exchange rate: 1 USD = ₱56 (adjust as needed)
     async function loadSheet() {
       const loadSequence = ++sheetLoadSequence;
       try {
-        const response = await fetch(LOSS_SHEET_URL);
-        if (loadSequence !== sheetLoadSequence) return;
-        if (!response.ok) throw new Error('Unable to fetch sheet');
-        const text = await response.text();
+        const text = await cachedFetchText(LOSS_SHEET_URL);
         if (loadSequence !== sheetLoadSequence) return;
         const rawLines = text.split(/\r\n|\n|\r/);
         if (rawLines.length < 2) throw new Error('No rows found in sheet');

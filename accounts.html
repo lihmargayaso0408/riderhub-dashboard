@@ -4,17 +4,22 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Manage Accounts — Rider Performance System</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://docs.google.com">
+<link rel="dns-prefetch" href="https://firestore.googleapis.com">
+<link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <script src="firebase-config.js"></script>
+<script src="sw-register.js" defer></script>
   <script type="module" src="auth.js"></script>
   <style>
     body{padding:0;margin:0;}
     .page-shell{max-width:1040px;margin:0 auto;padding:28px;}
     .page-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:18px;}
-    .page-head h1{font-family:'Space Grotesk',sans-serif;font-size:24px;margin:0;}
+    .page-head h1{font-family:'Space Grotesk',sans-serif;font-size:24px;margin:0;position:relative;padding-bottom:10px;}
+    .page-head h1::after{content:'';position:absolute;left:0;bottom:0;width:56px;height:3px;border-radius:999px;background:var(--grad-brand);}
     .page-head p{margin:4px 0 0;color:var(--text-dim);font-size:13px;}
     .page-actions{display:flex;align-items:center;gap:10px;}
     .back-link{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 12px;border-radius:999px;cursor:pointer;font-size:13px;text-decoration:none;transition:background .15s ease,border-color .15s ease;}
@@ -22,7 +27,7 @@
     .status-box{background:var(--card);border:1px solid var(--line-2);border-radius:6px;padding:10px 14px;font-size:13px;color:var(--text-dim);}
     .search-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
     .search-row input{width:100%;max-width:360px;padding:10px 12px;border:1px solid var(--line);border-radius:3px;font-family:'IBM Plex Sans';font-size:13px;background:var(--card);color:var(--text);}
-    .search-row input:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 3px rgba(232,163,61,.15);}
+    .search-row input:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 3px rgba(238,77,45,.15);}
     .count-badge{font-size:13px;color:var(--text-dim);margin-left:auto;}
     .accounts-list{display:flex;flex-direction:column;gap:14px;}
     .account-card{background:var(--card);border:1px solid var(--line-2);border-radius:8px;padding:16px 18px;transition:transform .25s cubic-bezier(.22,.61,.36,1),box-shadow .25s ease,border-color .25s ease;}
@@ -32,8 +37,8 @@
     .account-name{font-size:12.5px;color:var(--text-dim);margin-top:2px;}
     .account-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
     .role-chip{display:inline-flex;align-items:center;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;}
-    .role-admin{background:rgba(232,163,61,.16);color:var(--amber-deep);}
-    .role-user{background:rgba(148,163,184,.16);color:#64748b;}
+    .role-admin{background:rgba(238,77,45,.16);color:var(--amber-deep);}
+    .role-user{background:rgba(139,144,153,.16);color:#8B9099;}
     .account-opts{display:flex;gap:24px;flex-wrap:wrap;margin-bottom:14px;}
     .account-group{min-width:200px;}
     .account-group-title{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin-bottom:8px;}
@@ -48,7 +53,7 @@
     .btn-ghost[disabled],.btn-primary[disabled]{opacity:.5;cursor:not-allowed;}
   </style>
 </head>
-<body>
+<body class="dark">
   <div class="page-shell">
     <div class="page-head">
       <div>
@@ -72,6 +77,12 @@
   <div class="toast" id="toast"></div>
 
   <script type="module">
+    if (!window.Auth) {
+      // auth.js failed to load — say so instead of rendering an empty page.
+      document.body.insertAdjacentHTML('afterbegin',
+        '<div class="status-box" style="margin:20px">Could not start — the authentication module failed to load. Please refresh the page.</div>');
+      throw new Error('auth unavailable');
+    }
     const __perms = await window.Auth.guard('accounts');
     if (!__perms) throw new Error('redirect');
     if (__perms.role !== 'admin') {
