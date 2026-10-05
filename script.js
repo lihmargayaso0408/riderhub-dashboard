@@ -1205,7 +1205,10 @@ await renderTrend();
     const bottom = sorted.slice(-5).reverse();
     const rowHtml = r => `<div class="perf-row">
         <div class="perf-name"><b>${escapeHtml(r.name)}</b><span>${r.id?('#'+r.id+' · '):''}${escapeHtml(r.driverGroup||r.vehicleType)}</span></div>
-        <div class="perf-val" style="color:${GRADE_COLOR[r.grade]}">${fmtPct(r.deliverySuccessRate)}</div>
+        <div class="perf-right">
+          <div class="perf-val" style="color:${GRADE_COLOR[r.grade]}">${fmtPct(r.deliverySuccessRate)}</div>
+          <div class="perf-meta">assigned ${fmtNum(r.parcelsAssigned)} / ${fmtNum(r.parcelsDelivered)} delivered</div>
+        </div>
       </div>`;
     $('#topList').innerHTML = top.length ? top.map(rowHtml).join('') : '<div class="perf-row">No active riders yet.</div>';
     $('#bottomList').innerHTML = bottom.length ? bottom.map(rowHtml).join('') : '<div class="perf-row">No active riders yet.</div>';
