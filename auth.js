@@ -3,7 +3,8 @@
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
   getAuth, onAuthStateChanged,
-  createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut
+  createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut,
+  sendPasswordResetEmail
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import {
   doc, getDoc, setDoc, updateDoc, addDoc,
@@ -93,6 +94,10 @@ const Auth = {
     return cred.user;
   },
   async logout() { await signOut(auth); },
+
+  async sendPasswordReset(email) {
+    return sendPasswordResetEmail(auth, email);
+  },
 
   async getProfile(uid) {
     const s = await getDoc(doc(db, 'users', uid));

@@ -154,8 +154,9 @@
           <div class="account-group"><div class="account-group-title">Actions</div>${actions}</div>
           <div class="account-group"><div class="account-group-title">Pages</div>${pages}</div>
         </div>
-        <div class="account-actions">
+<div class="account-actions">
           <button class="btn-primary" data-act="save" type="button">Save changes</button>
+          <button class="btn-ghost" data-act="reset-pwd" type="button">Reset password</button>
           <button class="btn-ghost" data-act="remove" type="button" ${isSelf ? 'disabled title="You can\'t remove your own access"' : ''}>Remove access</button>
           <span class="account-msg" data-msg></span>
         </div>
@@ -191,7 +192,7 @@
           msgEl.className = 'account-msg';
           try {
             await Auth.setPerms(uid, { hubs, actions, status: 'approved', pages });
-            msgEl.textContent = 'Saved.';
+msgEl.textContent = 'Saved.';
             msgEl.className = 'account-msg ok';
             showToast('Access updated.');
           } catch (e) {
@@ -199,6 +200,27 @@
             msgEl.className = 'account-msg err';
           }
         });
+
+        const resetBtn = card.querySelector('[data-act="reset-pwd"]');
+        if (resetBtn) {
+          resetBtn.addEventListener('click', async () => {
+            const email = card.querySelector('.account-email').textContent;
+            if (!confirm(`Send password reset email to ${email}?`)) return;
+            resetBtn.disabled = true;
+            msgEl.textContent = 'Sending…';
+            msgEl.className = 'account-msg';
+            try {
+              await Auth.sendPasswordReset(email);
+              msgEl.textContent = 'Reset email sent.';
+              msgEl.className = 'account-msg ok';
+              showToast('Password reset email sent.');
+            } catch (e) {
+              msgEl.textContent = 'Could not send: ' + (e.message || 'error');
+              msgEl.className = 'account-msg err';
+              resetBtn.disabled = false;
+            }
+          });
+        }
 
         const removeBtn = card.querySelector('[data-act="remove"]');
         if (removeBtn && !removeBtn.disabled) {
