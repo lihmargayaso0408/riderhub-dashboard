@@ -319,9 +319,9 @@
   if (pullSpxBtn) pullSpxBtn.addEventListener('click', function () {
     var startDate = prompt('Start date (YYYY-MM-DD):', new Date().toISOString().slice(0, 10));
     if (!startDate) return;
-    if (typeof window.baukoBridgePull !== 'function') { showToast('Data pull extension not installed.'); return; }
+    if (typeof window.spxBridgePull !== 'function') { showToast('Data pull extension not installed.'); return; }
     setStatus('loading', 'Pulling data…');
-    window.baukoBridgePull(hubNameInput.value || 'Bauko', startDate)
+    window.spxBridgePull(hubNameInput.value || 'Bauko', startDate)
       .then(function (r) { setStatus('success', 'Data pulled.'); showToast('Data pull complete.'); })
       .catch(function (e) { setStatus('error', 'Data pull failed.'); showToast('Data pull failed: ' + (e.message || e)); });
   });

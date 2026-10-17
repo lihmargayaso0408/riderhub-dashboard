@@ -1503,7 +1503,7 @@ function openModal(){
     const status = $('#spxBridgeStatus');
     const btn = $('#activateBridgeBtn');
     const pullBtn = $('#pullSpxBtn');
-    if(typeof window.baukoBridgePull === 'function'){
+    if(typeof window.spxBridgePull === 'function'){
       if(status){ status.textContent = 'Data pull: active'; status.style.color = 'var(--teal)'; }
       if(pullBtn) pullBtn.disabled = false;
       if(btn) btn.style.display = 'none';
@@ -1516,23 +1516,23 @@ function openModal(){
 
   function activateBridge(){
     checkBridge();
-    if(typeof window.baukoBridgePull === 'function'){
+    if(typeof window.spxBridgePull === 'function'){
       showToast('Data pull is active.');
     } else {
-      showToast('Load the BAUKO SPX Bridge extension in Chrome (chrome://extensions → Load unpacked, point at bauko-spx-bridge/).');
+      showToast('Load the SPX Bridge extension in Chrome (chrome://extensions → Load unpacked, point at spx-bridge/).');
     }
   }
 
   function pullFromSpx(){
     const startDate = $('#dateInput').value || new Date().toISOString().slice(0, 10);
     if(!startDate) return;
-    if(typeof window.baukoBridgePull !== 'function'){
+    if(typeof window.spxBridgePull !== 'function'){
       showToast('Data pull extension not installed.');
       return;
     }
     const hub = $('#hubSelect').value;
     showToast('Pulling data…');
-    window.baukoBridgePull(hub, startDate)
+    window.spxBridgePull(hub, startDate)
       .then(function(){
         showToast('Data pulled.');
         closeModal();

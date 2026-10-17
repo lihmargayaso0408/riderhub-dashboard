@@ -1,27 +1,34 @@
 {
   "manifest_version": 3,
-  "name": "BAUKO SPX BRIDGE",
-  "version": "2.4.0",
-  "description": "BAUKO SPX Bridge: pulls Inventory, Delivering and OnHold exports from SPX (any station you are logged in to) into the BAUKO Dispatch Checker and Rider OnHold Checker.",
-  "host_permissions": [
-    "https://spx.shopee.ph/*",
-    "https://*.susercontent.com/*",
-    "https://*.file.susercontent.com/*"
-  ],
-  "background": {
-    "service_worker": "background.js"
-  },
+  "name": "SPX Bridge — Rider Performance System",
+  "version": "1.0.0",
+  "description": "Pulls the Driver LM Performance Report from SPX (spx.shopee.ph) into the Rider Performance System dashboard.",
+  "permissions": ["tabs", "scripting"],
+  "host_permissions": ["https://spx.shopee.ph/*"],
+  "background": { "service_worker": "background.js" },
   "content_scripts": [
     {
-      "matches": [
-        "https://nol3devtool.github.io/*",
-        "http://localhost/*",
-        "http://127.0.0.1/*",
-        "file:///*"
-      ],
-      "js": ["content.js"],
+      "matches": ["https://spx.shopee.ph/*"],
+      "js": ["spx-main.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://spx.shopee.ph/*"],
+      "js": ["spx-content.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
+      "exclude_matches": ["https://spx.shopee.ph/*"],
+      "js": ["dashboard-bridge.js"],
       "run_at": "document_idle"
     }
   ],
-  "permissions": ["storage", "downloads"]
+  "web_accessible_resources": [
+    {
+      "resources": ["dashboard-main.js"],
+      "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"]
+    }
+  ]
 }
