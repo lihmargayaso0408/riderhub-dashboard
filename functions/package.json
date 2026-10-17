@@ -1,14 +1,14 @@
 {
   "name": "dispatch-functions",
-  "description": "Cloud Functions for the Rider Performance System (access-request email notifications)",
+  "description": "Cloudflare Worker for the Rider Performance System (access-request email notifications)",
   "private": true,
+  "main": "index.js",
+  "type": "module",
   "engines": {
     "node": "18"
   },
-  "main": "index.js",
-  "dependencies": {
-    "firebase-admin": "^11.11.0",
-    "firebase-functions": "^4.9.0",
-    "nodemailer": "^6.9.13"
+  "dependencies": {},
+  "devDependencies": {
+    "wrangler": "^3.0.0"
   }
 }

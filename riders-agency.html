@@ -4,14 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Riders &amp; Agency per Hub</title>
-  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
-<link rel="preconnect" href="https://docs.google.com">
-<link rel="dns-prefetch" href="https://firestore.googleapis.com">
+  <link rel="preconnect" href="https://docs.google.com">
 <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
-    <script src="firebase-config.js"></script>
+    <script src="cloudflare-config.js"></script>
+    <script type="module" src="cloudflare-api.js"></script>
 <script src="sw-register.js" defer></script>
     <script type="module" src="auth.js"></script>
     <style>
@@ -142,7 +141,7 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text
     const HUB_FALLBACK = ['Bauko','Buguias','Irisan','Itogon','Itogon Tuding','Kapangan','La Trinidad Pico','MB Atok'];
 
     // Build the hub tab buttons dynamically from the Firestore hub list.
-    // Falls back to HUB_FALLBACK when Firebase is unavailable.
+    // Falls back to HUB_FALLBACK when Cloudflare Worker is unavailable.
     async function getHubsList(){
       try {
         if (window.Auth && typeof window.Auth.getHubs === 'function') {

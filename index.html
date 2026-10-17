@@ -4,9 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Rider Performance System — Rider & Hub Performance</title>
-<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://docs.google.com">
-<link rel="dns-prefetch" href="https://firestore.googleapis.com">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdnjs.cloudflare.com">
@@ -104,7 +102,7 @@
 </div>
 
 <footer>
-  <span>Data is parsed and stored in Firebase so the dashboard stays up to date for everyone using it.</span>
+  <span>Data is parsed and stored in Cloudflare Worker so the dashboard stays up to date for everyone using it.</span>
   <button id="resetBtn">Clear all stored data</button>
 </footer>
 
@@ -248,7 +246,12 @@
       </label>
     </div>
     <div class="modal-msg" id="modalMsg"></div>
+    <div class="field" style="display:flex;align-items:center;gap:8px;">
+      <span id="spxBridgeStatus" style="font-size:11px;color:var(--text-dim);">Data pull: checking…</span>
+      <button class="btn-ghost" id="activateBridgeBtn" type="button" style="font-size:11px;padding:6px 10px;">Activate Data pull</button>
+    </div>
     <div class="modal-actions">
+      <button class="btn-ghost" id="pullSpxBtn">Data pull</button>
       <button class="btn-ghost" id="cancelUpload">Cancel</button>
       <button class="btn-primary" id="confirmUpload" disabled>Add to dashboard</button>
     </div>
@@ -363,15 +366,15 @@
     </div>
   </div>
 
-<!-- Firebase Config (Standard Script) -->
-<script src="firebase-config.js"></script>
+<!-- Cloudflare Config (Standard Script) -->
+<script src="cloudflare-config.js"></script>
 <script src="sw-register.js" defer></script>
 
 <!-- Charts (deferred so it doesn't block rendering) -->
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 
-<!-- Firebase Client (Module Script) -->
-<script type="module" src="firebase-client.js"></script>
+<!-- Cloudflare Client (Module Script) -->
+<script type="module" src="cloudflare-api.js"></script>
 
 <!-- Auth + access control (Module Script) -->
 <script type="module" src="auth.js"></script>

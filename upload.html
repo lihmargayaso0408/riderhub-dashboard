@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <script src="firebase-config.js"></script>
-  <script type="module" src="firebase-client.js"></script>
+  <script src="cloudflare-config.js"></script>
+  <script type="module" src="cloudflare-api.js"></script>
   <script type="module" src="auth.js"></script>
   <style>
     body { padding: 0; margin: 0; }
@@ -105,6 +105,8 @@
       <div class="preview-wrap" id="previewWrap" style="display:none;"></div>
 
       <div class="modal-actions">
+        <button class="btn-ghost" id="pullSpxBtn" type="button">Data pull</button>
+        <button class="btn-ghost" id="exportBtn" type="button" disabled>Export CSV</button>
         <button class="btn-ghost" id="resetBtn" type="button">Clear</button>
         <button class="btn-primary" id="submitBtn" type="button" disabled>Send to Hub Sheet</button>
       </div>

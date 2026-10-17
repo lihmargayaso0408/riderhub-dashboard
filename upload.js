@@ -39,7 +39,7 @@
   var dropText = document.getElementById('dropText');
   var hubNameInput = document.getElementById('hubNameInput');
   var submitBtn = document.getElementById('submitBtn');
-  var resetBtn = document.getElementById('resetBtn');
+  var pullSpxBtn = document.getElementById('pullSpxBtn');
   var statusPill = document.getElementById('statusPill');
   var statusText = document.getElementById('statusText');
   var summaryGrid = document.getElementById('summaryGrid');
@@ -194,7 +194,25 @@
     summaryGrid.style.display = '';
     renderPreview(riders, ['Rider ID', 'Rider Name', 'Status']);
     submitBtn.disabled = false;
+    if (exportBtn) exportBtn.disabled = false;
     setStatus('success', 'Ready — ' + riders.length + ' riders detected.');
+  }
+
+  // ---- Export CSV ----
+  function exportCsv() {
+    if (!currentPayload) return;
+    var headers = ['Rider ID', 'Rider Name', 'Status'];
+    var csv = headers.join(',') + '\n' + currentPayload.riders.map(function (r) {
+      return headers.map(function (h) { return '"' + String(r[h] || '').replace(/"/g, '""') + '"'; }).join(',');
+    }).join('\n');
+    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    var link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = (currentPayload.hub || 'manifest') + '.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
   }
 
   // ---- Submission ----
@@ -265,6 +283,7 @@
     if (previewWrap) { previewWrap.style.display = 'none'; previewWrap.innerHTML = ''; }
     if (previewTitle) previewTitle.style.display = 'none';
     if (submitBtn) submitBtn.disabled = true;
+    if (exportBtn) exportBtn.disabled = true;
     if (dropText) dropText.innerHTML = '<b>Click to choose</b> or drag a .csv file here';
     setStatus('idle', 'Idle');
   }
@@ -297,7 +316,16 @@
     });
   }
 
-  if (submitBtn) submitBtn.addEventListener('click', submit);
+  if (pullSpxBtn) pullSpxBtn.addEventListener('click', function () {
+    var startDate = prompt('Start date (YYYY-MM-DD):', new Date().toISOString().slice(0, 10));
+    if (!startDate) return;
+    if (typeof window.baukoBridgePull !== 'function') { showToast('Data pull extension not installed.'); return; }
+    setStatus('loading', 'Pulling data…');
+    window.baukoBridgePull(hubNameInput.value || 'Bauko', startDate)
+      .then(function (r) { setStatus('success', 'Data pulled.'); showToast('Data pull complete.'); })
+      .catch(function (e) { setStatus('error', 'Data pull failed.'); showToast('Data pull failed: ' + (e.message || e)); });
+  });
+  if (exportBtn) exportBtn.addEventListener('click', exportCsv);
   if (resetBtn) resetBtn.addEventListener('click', resetAll);
 
   setStatus('idle', 'Idle');

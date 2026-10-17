@@ -4,9 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sign in — Rider Performance System</title>
-  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
-<link rel="preconnect" href="https://docs.google.com">
-<link rel="dns-prefetch" href="https://firestore.googleapis.com">
+  <link rel="preconnect" href="https://docs.google.com">
 <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -83,9 +81,9 @@
     </div>
   </div>
 
-  <script src="firebase-config.js"></script>
+  <script src="cloudflare-config.js"></script>
 <script src="sw-register.js" defer></script>
-  <script type="module" src="firebase-client.js"></script>
+  <script type="module" src="cloudflare-api.js"></script>
   <script type="module" src="auth.js"></script>
   <script type="module">
     const msgEl = document.getElementById('loginMsg');

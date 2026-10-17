@@ -3,7 +3,7 @@ import { cachedFetchText } from './data-cache.js';
 (function(){
   "use strict";
 
-  const hasFirebaseConfig = !!(window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.apiKey);
+  const hasCloudflareConfig = !!window.CLOUDFLARE_WORKER_URL;
 
   /* ---------------- Field mapping ---------------- */
   const FIELD_MAP = [
@@ -113,8 +113,8 @@ import { cachedFetchText } from './data-cache.js';
   }
 
   /* ---------------- Storage helpers ---------------- */
-  // Hubs are now loaded dynamically from Firestore (see Auth.getHubs()).
-  // The hardcoded list is retained as a fallback when Firebase is unavailable.
+  // Hubs are now loaded dynamically from the Cloudflare Worker (see Auth.getHubs()).
+  // The hardcoded list is retained as a fallback when the Worker is unavailable.
   const HUB_FALLBACK = ['Bauko','Buguias','Irisan','Itogon','Itogon Tuding','Kapangan','La Trinidad Pico','MB Atok'];
   const REMOVED_HUBS = ['MB Mankayan'];
 
@@ -125,13 +125,13 @@ import { cachedFetchText } from './data-cache.js';
     return hubs.filter(isHubActive).slice().sort((a,b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
   }
 
-  // Resolve the current hub list: prefer state.hubs (loaded from Firestore),
+  // Resolve the current hub list: prefer state.hubs (loaded from the Worker),
   // fall back to the hardcoded list when not yet loaded.
   function currentHubs(){
     return (state.hubs && state.hubs.length) ? sortHubs(state.hubs) : sortHubs(HUB_FALLBACK);
   }
 
-  // Load the hub list from Auth (Firestore + fallback merge). Safe to call
+  // Load the hub list from Auth (Worker + fallback merge). Safe to call
   // multiple times; updates state.hubs and triggers a UI refresh if needed.
   async function loadHubs(){
     try {
@@ -145,27 +145,27 @@ import { cachedFetchText } from './data-cache.js';
     }
   }
 
-  const hasFirebaseStorage = !!(window.firebaseAPI && window.firebaseAPI.isEnabled && window.firebaseAPI.isEnabled());
+  const hasCloudflareStorage = !!(window.cloudflareAPI && window.cloudflareAPI.isEnabled && window.cloudflareAPI.isEnabled());
 
   const storage = {
     async get(key){
-      if(!hasFirebaseStorage) return null;
-      try{ return await window.firebaseAPI.get(key); }
+      if(!hasCloudflareStorage) return null;
+      try{ return await window.cloudflareAPI.get(key); }
       catch(e){ return null; }
     },
     async set(key,value){
-      if(!hasFirebaseStorage) return null;
-      try{ return await window.firebaseAPI.set(key, value); }
+      if(!hasCloudflareStorage) return null;
+      try{ return await window.cloudflareAPI.set(key, value); }
       catch(e){ return null; }
     },
     async delete(key){
-      if(!hasFirebaseStorage) return null;
-      try{ return await window.firebaseAPI.delete(key); }
+      if(!hasCloudflareStorage) return null;
+      try{ return await window.cloudflareAPI.delete(key); }
       catch(e){ return null; }
     },
     async list(prefix=''){
-      if(!hasFirebaseStorage) return {keys:[]};
-      try{ return await window.firebaseAPI.list(prefix); }
+      if(!hasCloudflareStorage) return {keys:[]};
+      try{ return await window.cloudflareAPI.list(prefix); }
       catch(e){ return {keys:[]}; }
     },
   };
@@ -330,7 +330,7 @@ function getExportDates(hub){
   }
 
   const state = {
-    hubs: null, // loaded from Firestore (Auth.getHubs); null => not yet loaded
+    hubs: null, // loaded from the Worker (Auth.getHubs); null => not yet loaded
     hubIndex: Object.fromEntries(HUB_FALLBACK.map(h => [h, []])),
     currentHub: 'All',
     currentDate: null,
@@ -392,7 +392,7 @@ function fmtWeekLabel(d){
         window.Auth.seedHubsIfEmpty().catch(()=>{});
       }
 
-      // Load the dynamic hub list (Firestore + fallback). This populates
+      // Load the dynamic hub list (Worker + fallback). This populates
       // state.hubs and is used by applyAccessControl() to build the dropdown.
       await loadHubs();
       populateHubSelects();
@@ -404,9 +404,9 @@ function fmtWeekLabel(d){
         return;
       }
 
-      if(!hasFirebaseStorage){
+      if(!hasCloudflareStorage){
         $('#storageBanner').innerHTML = `<div class="banner">
-          <span>Firebase is not configured yet. Please add your Firebase config before uploading manifests.</span>
+          <span>Cloudflare Worker is not configured yet. Please add your Worker URL before uploading manifests.</span>
           <button id="dismissBanner">Dismiss</button>
         </div>`;
         const db = document.getElementById('dismissBanner');
@@ -478,8 +478,8 @@ function fmtWeekLabel(d){
       } catch (e) { /* ignore */ }
     }
 
-    if(hasFirebaseStorage && window.firebaseAPI && typeof window.firebaseAPI.subscribe === 'function'){
-      autoRefreshUnsub = window.firebaseAPI.subscribe(async function(changedKeys){
+    if(hasCloudflareStorage && window.cloudflareAPI && typeof window.cloudflareAPI.subscribe === 'function'){
+      autoRefreshUnsub = window.cloudflareAPI.subscribe(async function(changedKeys){
         const relevant = changedKeys.some(function(k){ return k.startsWith('snapshot:') || k === 'hubs-index' || k.startsWith('summary:'); });
         if(!relevant || isRefreshing) return;
         try {
@@ -1401,9 +1401,10 @@ function openModal(){
      renderWeekPicker();
      // Default to the current hub if it's a known hub, else the first hub.
      const hubs = currentHubs();
-     if(hubs.includes(state.currentHub)) $('#hubSelect').value = state.currentHub;
-     else if(hubs.length) $('#hubSelect').value = hubs[0];
-   }
+      if(hubs.includes(state.currentHub)) $('#hubSelect').value = state.currentHub;
+      else if(hubs.length) $('#hubSelect').value = hubs[0];
+      checkBridge();
+    }
   function closeModal(){ $('#overlay').classList.remove('show'); }
 
   function handleFile(file){
@@ -1496,6 +1497,49 @@ function openModal(){
       btn.disabled = false;
       btn.textContent = 'Add to dashboard';
     }
+  }
+
+  function checkBridge(){
+    const status = $('#spxBridgeStatus');
+    const btn = $('#activateBridgeBtn');
+    const pullBtn = $('#pullSpxBtn');
+    if(typeof window.baukoBridgePull === 'function'){
+      if(status){ status.textContent = 'Data pull: active'; status.style.color = 'var(--teal)'; }
+      if(pullBtn) pullBtn.disabled = false;
+      if(btn) btn.style.display = 'none';
+    } else {
+      if(status){ status.textContent = 'Data pull: not installed'; status.style.color = 'var(--brick)'; }
+      if(pullBtn) pullBtn.disabled = true;
+      if(btn) btn.style.display = 'inline-block';
+    }
+  }
+
+  function activateBridge(){
+    checkBridge();
+    if(typeof window.baukoBridgePull === 'function'){
+      showToast('Data pull is active.');
+    } else {
+      showToast('Load the BAUKO SPX Bridge extension in Chrome (chrome://extensions → Load unpacked, point at bauko-spx-bridge/).');
+    }
+  }
+
+  function pullFromSpx(){
+    const startDate = $('#dateInput').value || new Date().toISOString().slice(0, 10);
+    if(!startDate) return;
+    if(typeof window.baukoBridgePull !== 'function'){
+      showToast('Data pull extension not installed.');
+      return;
+    }
+    const hub = $('#hubSelect').value;
+    showToast('Pulling data…');
+    window.baukoBridgePull(hub, startDate)
+      .then(function(){
+        showToast('Data pulled.');
+        closeModal();
+      })
+      .catch(function(e){
+        showToast('Data pull failed: ' + (e && e.message ? e.message : e));
+      });
   }
 
   function showToast(html){
@@ -2167,6 +2211,8 @@ $('#downloadHubSelect').addEventListener('change', populateDownloadWeekOptions);
       if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
     });
     $('#confirmUpload').addEventListener('click', confirmUpload);
+    $('#pullSpxBtn').addEventListener('click', pullFromSpx);
+    $('#activateBridgeBtn').addEventListener('click', activateBridge);
     $('#resetBtn').addEventListener('click', resetAll);
 
     $('#themeToggle').addEventListener('click', async ()=>{

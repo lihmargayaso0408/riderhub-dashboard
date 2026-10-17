@@ -1,16 +1,7 @@
 // chat.js — real-time messaging across the dashboard.
-// Uses Firestore chatMessages collection with onSnapshot listeners.
-import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import {
-  getFirestore, collection, doc, addDoc, updateDoc,
-  query, where, orderBy, onSnapshot, serverTimestamp,
-  getDocs, getDoc, limit
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-const app = getApps().length ? getApps()[0] : initializeApp(window.FIREBASE_CONFIG);
-const auth = getAuth(app);
-const db = getFirestore(app);
+// Uses Cloudflare Worker R2 storage (chat:{channelId} JSON arrays) with
+// short-polling for updates instead of Firestore onSnapshot.
+import { cachedFetchText } from './data-cache.js';
 
 function getChannelId(uid1, uid2) {
   return [uid1, uid2].sort().join('_');
@@ -18,7 +9,7 @@ function getChannelId(uid1, uid2) {
 
 function formatTime(ts) {
   if (!ts) return '';
-  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  const d = new Date(ts);
   const now = new Date();
   const diffDays = Math.floor((now - d) / (1000 * 60 * 60 * 24));
   if (diffDays === 0) {
@@ -36,10 +27,17 @@ function getInitials(name) {
   return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 }
 
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+const CHAT_KEY_PREFIX = 'chat:';
+const POLL_INTERVAL = 5000;
+
 const Chat = {
-  db, auth,
-  _unsubMessages: null,
-  _unsubUsers: null,
+  _pollTimer: null,
   _currentUser: null,
   _selectedUser: null,
   _users: [],
@@ -48,24 +46,16 @@ const Chat = {
   _searchQuery: '',
 
   async init() {
-    this._currentUser = auth.currentUser;
-    if (!this._currentUser) {
-      this._currentUser = await new Promise(resolve => {
-        const unsub = onAuthStateChanged(auth, user => { unsub(); resolve(user); });
-      });
-    }
+    const user = window.Auth ? window.Auth.currentUser() : null;
+    this._currentUser = user;
     if (!this._currentUser) return;
     this._bindUI();
-    this._setupUnsubListener();
     try {
-      await this._loadUsersWithRetry();
+      await this._loadUsers();
     } catch (e) {
       console.error('Chat: init load users failed', e);
     }
-  },
-
-  _setupUnsubListener() {
-    window.addEventListener('beforeunload', () => this._unsubscribeMessages());
+    this._startPolling();
   },
 
   _bindUI() {
@@ -106,42 +96,11 @@ const Chat = {
     if (isOpen) {
       this._clearUnread();
       if (this._selectedUser) {
-        this._subscribeMessages(this._selectedUser.uid);
+        this._renderMessagesFor(this._selectedUser.uid);
       }
       if (!this._selectedUser && this._users.length > 0) {
         this._renderUserList();
       }
-    } else {
-      this._unsubscribeMessages();
-    }
-  },
-
-  async _loadUsersWithRetry() {
-    const maxRetries = 3;
-    const baseDelay = 1000;
-    for (let i = 0; i < maxRetries; i++) {
-      try {
-        await this._loadUsers();
-        return;
-      } catch (e) {
-        const isPermission = e && e.code === 'permission-denied';
-        const delay = baseDelay * Math.pow(2, i);
-        console.error(`Chat: load users attempt ${i + 1} failed`, e);
-        if (isPermission) {
-          const list = document.getElementById('chatUserList');
-          if (list) {
-            list.innerHTML = '<div class="chat-empty-state">Chat access denied. Ask the owner to check Firestore permissions.</div>';
-          }
-          return;
-        }
-        if (i < maxRetries - 1) {
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-      }
-    }
-    const list = document.getElementById('chatUserList');
-    if (list) {
-      list.innerHTML = '<div class="chat-empty-state">Could not load users. Please refresh.</div>';
     }
   },
 
@@ -150,24 +109,14 @@ const Chat = {
     if (!list) return;
     list.innerHTML = '<div class="chat-empty-state">Loading users...</div>';
 
-    const q = query(
-      collection(db, 'users'),
-      where('status', '==', 'approved')
-    );
-
-    this._unsubUsers = await new Promise((resolve, reject) => {
-      onSnapshot(q, (snapshot) => {
-        this._users = snapshot.docs
-          .map(d => ({ uid: d.id, ...d.data() }))
-          .filter(u => u.uid !== this._currentUser?.uid);
-        this._renderUserList();
-        resolve();
-      }, (err) => {
-        console.error('Chat: failed to load users', err);
-        list.innerHTML = '<div class="chat-empty-state">Failed to load users</div>';
-        reject(err);
-      });
-    });
+    try {
+      const users = await window.Auth.listAccounts();
+      this._users = users.filter(u => u.uid !== this._currentUser?.uid);
+      this._renderUserList();
+    } catch (e) {
+      console.error('Chat: failed to load users', e);
+      list.innerHTML = '<div class="chat-empty-state">Failed to load users</div>';
+    }
   },
 
   _renderUserList() {
@@ -207,8 +156,8 @@ const Chat = {
       item.innerHTML = `
         <div class="chat-user-avatar">${getInitials(user.name || user.email)}</div>
         <div class="chat-user-info">
-          <div class="chat-user-name">${this._escapeHtml(user.name || user.email || 'Unknown')}${unread ? `<span class="chat-unread-badge">${unread}</span>` : ''}</div>
-          <div class="chat-user-email">${this._escapeHtml(user.email || '')}</div>
+          <div class="chat-user-name">${escapeHtml(user.name || user.email || 'Unknown')}${unread ? `<span class="chat-unread-badge">${unread}</span>` : ''}</div>
+          <div class="chat-user-email">${escapeHtml(user.email || '')}</div>
           ${lastText ? `<div class="chat-user-last">${lastText.slice(0, 40)}${lastText.length > 40 ? '...' : ''}</div>` : ''}
         </div>
       `;
@@ -226,12 +175,11 @@ const Chat = {
     if (conversation) conversation.hidden = false;
     if (partnerName) partnerName.textContent = user.name || user.email || 'Chat';
     this._clearUnreadFor(user.uid);
-    this._subscribeMessages(user.uid);
+    this._renderMessagesFor(user.uid);
   },
 
   _showUserSelect() {
     this._selectedUser = null;
-    this._unsubscribeMessages();
     const userSelect = document.getElementById('chatUserSelect');
     const conversation = document.getElementById('chatConversation');
     if (userSelect) userSelect.hidden = false;
@@ -241,48 +189,40 @@ const Chat = {
     this._renderUserList();
   },
 
-  _subscribeMessages(otherUid) {
-    this._unsubscribeMessages();
-    const myUid = this._currentUser.uid;
-    const channelId = getChannelId(myUid, otherUid);
+  _channelKey(otherUid) {
+    return CHAT_KEY_PREFIX + getChannelId(this._currentUser.uid, otherUid);
+  },
+
+  async _renderMessagesFor(otherUid) {
     const messagesEl = document.getElementById('chatMessages');
-    if (messagesEl) messagesEl.innerHTML = '<div class="chat-empty-state">Loading messages...</div>';
+    if (!messagesEl) return;
+    messagesEl.innerHTML = '<div class="chat-empty-state">Loading messages...</div>';
 
-    const q = query(
-      collection(db, 'chatMessages'),
-      where('channelId', '==', channelId),
-      orderBy('timestamp', 'asc'),
-      limit(200)
-    );
-
-    this._unsubMessages = onSnapshot(q, (snapshot) => {
-      const messages = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    try {
+      const messages = await this._loadMessages(otherUid);
       this._renderMessages(messages);
-      this._scrollToBottom();
       if (messages.length > 0) {
         const last = messages[messages.length - 1];
         this._lastMessages[otherUid] = last;
-        if (last.senderId !== myUid) {
+        if (last.senderId !== this._currentUser.uid) {
           this._incrementUnread(otherUid);
         }
         this._renderUserList();
       }
-    }, (err) => {
-      console.error('Chat: messages listener error', err);
-      if (messagesEl) {
-        const isPerm = err && err.code === 'permission-denied';
-        messagesEl.innerHTML = isPerm
-          ? '<div class="chat-empty-state">Message access denied. Ask the owner to check Firestore chat rules.</div>'
-          : '<div class="chat-empty-state">Failed to load messages. Retrying...</div>';
-      }
-      setTimeout(() => this._subscribeMessages(otherUid), 3000);
-    });
+    } catch (e) {
+      console.error('Chat: failed to load messages', e);
+      messagesEl.innerHTML = '<div class="chat-empty-state">Failed to load messages.</div>';
+    }
   },
 
-  _unsubscribeMessages() {
-    if (this._unsubMessages) {
-      this._unsubMessages();
-      this._unsubMessages = null;
+  async _loadMessages(otherUid) {
+    const key = this._channelKey(otherUid);
+    const r = await window.cloudflareAPI.get(key);
+    if (!r || !r.value) return [];
+    try {
+      return JSON.parse(r.value);
+    } catch (e) {
+      return [];
     }
   },
 
@@ -300,11 +240,12 @@ const Chat = {
       const el = document.createElement('div');
       el.className = `chat-message ${isSent ? 'sent' : 'received'}`;
       el.innerHTML = `
-        <div>${this._escapeHtml(msg.text)}</div>
+        <div>${escapeHtml(msg.text)}</div>
         <div class="chat-message-meta">${formatTime(msg.timestamp)}</div>
       `;
       container.appendChild(el);
     });
+    this._scrollToBottom();
   },
 
   _scrollToBottom() {
@@ -312,30 +253,56 @@ const Chat = {
     if (container) container.scrollTop = container.scrollHeight;
   },
 
-  _escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+  _startPolling() {
+    if (this._pollTimer) return;
+    this._pollTimer = setInterval(async () => {
+      if (document.hidden) return;
+      if (!this._selectedUser) return;
+      try {
+        const messages = await this._loadMessages(this._selectedUser.uid);
+        const lastKnown = this._lastMessages[this._selectedUser.uid];
+        const lastNew = messages[messages.length - 1];
+        if (lastNew && lastKnown && lastNew.timestamp !== lastKnown.timestamp) {
+          this._renderMessages(messages);
+          this._lastMessages[this._selectedUser.uid] = lastNew;
+          if (lastNew.senderId !== this._currentUser.uid) {
+            this._incrementUnread(this._selectedUser.uid);
+          }
+          this._renderUserList();
+        }
+      } catch (e) { /* ignore */ }
+    }, POLL_INTERVAL);
   },
 
   async _sendMessage(text) {
     if (!this._currentUser || !this._selectedUser) return;
     const channelId = getChannelId(this._currentUser.uid, this._selectedUser.uid);
+    const key = CHAT_KEY_PREFIX + channelId;
+    const message = {
+      channelId,
+      senderId: this._currentUser.uid,
+      receiverId: this._selectedUser.uid,
+      text,
+      timestamp: new Date().toISOString(),
+      senderName: this._currentUser.name || this._currentUser.email
+    };
+
     try {
-      await addDoc(collection(db, 'chatMessages'), {
-        channelId,
-        senderId: this._currentUser.uid,
-        receiverId: this._selectedUser.uid,
-        text,
-        timestamp: serverTimestamp(),
-        senderName: this._currentUser.displayName || this._currentUser.email
-      });
+      const r = await window.cloudflareAPI.get(key);
+      let messages = [];
+      if (r && r.value) {
+        try { messages = JSON.parse(r.value); } catch (e) { messages = []; }
+      }
+      messages.push(message);
+      await window.cloudflareAPI.set(key, JSON.stringify(messages));
+
       this._lastMessages[this._selectedUser.uid] = {
         text,
         timestamp: Date.now(),
         senderId: this._currentUser.uid
       };
       this._renderUserList();
+      this._renderMessagesFor(this._selectedUser.uid);
     } catch (err) {
       console.error('Chat: failed to send message', err);
     }
@@ -365,10 +332,6 @@ const Chat = {
       badge.textContent = total;
       badge.hidden = total === 0;
     }
-  },
-
-  _clearBadge() {
-    this._clearUnread();
   }
 };
 

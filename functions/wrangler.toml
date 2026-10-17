@@ -1,0 +1,9 @@
+name = "rider-performance-functions"
+main = "index.js"
+compatibility_date = "2024-10-01"
+
+[vars]
+ADMIN_EMAIL = ""
+EMAIL_API_URL = ""
+EMAIL_API_KEY = ""
+EMAIL_FROM = ""

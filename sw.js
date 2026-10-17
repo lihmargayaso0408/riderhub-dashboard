@@ -5,20 +5,19 @@
 // a slow connection the 3s timeout kept serving the cached copy — so fixes never
 // reached the browser and pages looked broken for as long as the connection was
 // slow. App code now always goes straight to the network; the browser's normal
-// cache and the IndexedDB caches in firestore-setup.js / data-cache.js handle the
-// data side.
+// cache and the IndexedDB caches in data-cache.js handle the data side.
 //
 // Cached here (safe because these are version-pinned URLs that never change
 // content in place):
-//   • Firebase SDK modules (gstatic)   • Leaflet (unpkg)
-//   • PapaParse (jsdelivr)              • Google Fonts
+//   • Cloudflare API scripts   • Leaflet (unpkg)
+//   • PapaParse (jsdelivr)      • Google Fonts
 //
-// Firestore and Auth traffic never touches this worker.
+// Cloudflare Worker traffic never touches this worker.
 const VERSION = 'spx-vendor-v7';
 const VENDOR_CACHE = VERSION + '-vendor';
 
 const VENDOR_HOSTS = [
-  'www.gstatic.com',
+  'rapid-sea-a634.lihmargayaso.workers.dev',
   'cdnjs.cloudflare.com',
   'unpkg.com',
   'cdn.jsdelivr.net',

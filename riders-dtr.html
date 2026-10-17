@@ -4,16 +4,17 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Riders DTR — Time-In Tracker</title>
-  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  
 <link rel="preconnect" href="https://docs.google.com">
-<link rel="dns-prefetch" href="https://firestore.googleapis.com">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <!-- PapaParse for Client-Side CSV Parsing -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-  <script src="firebase-config.js"></script>
+  <script src="cloudflare-config.js"></script>
+  <script type="module" src="cloudflare-api.js"></script>
 <script src="sw-register.js" defer></script>
   <script type="module" src="auth.js"></script>
   <style>
@@ -199,7 +200,7 @@
   </div>
 
   <script type="module">
-    import { doc, setDoc, getDoc, getDocs, collection, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { cachedFetchText } from './data-cache.js';
 
     if (!window.Auth) {
       // auth.js failed to load — say so instead of leaving the page empty.
@@ -226,8 +227,8 @@
       });
     }
 
-    function firebaseEnabled() {
-      return !!(window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.apiKey && window.Auth && window.Auth.db);
+    function cloudflareEnabled() {
+      return !!window.cloudflareAPI && typeof window.cloudflareAPI.get === 'function' && typeof window.cloudflareAPI.set === 'function' && typeof window.cloudflareAPI.list === 'function';
     }
 
     function mergeRiderData(existing, incoming) {
@@ -260,8 +261,8 @@
     }
 
     async function saveDtrData(data) {
-      if (!firebaseEnabled()) {
-        uploadStatusEl.innerHTML = '<span class="muted">Firebase not configured — data shown but not saved.</span>';
+      if (!cloudflareEnabled()) {
+        uploadStatusEl.innerHTML = '<span class="muted">Cloudflare Worker not configured — data shown but not saved.</span>';
         return false;
       }
 
@@ -287,37 +288,28 @@
           const docId = ('dtr_' + hubKey + '_' + dateStr).replace(/:/g, '_');
           const groupData = groups[key];
 
-          const docRef = doc(window.Auth.db, 'dispatch_data', docId);
+          const existingRaw = await window.cloudflareAPI.get(docId);
           let mergedData = groupData;
 
           try {
-            const existingSnap = await getDoc(docRef);
-            if (existingSnap.exists()) {
-              const existingContent = existingSnap.data().content;
-              try {
-                const existingData = JSON.parse(existingContent);
-                if (Array.isArray(existingData)) {
-                  mergedData = mergeRiderData(existingData, groupData);
-                }
-              } catch (parseErr) {
-                console.warn('DTR SAVE: Failed to parse existing content for', docId, parseErr);
+            if (existingRaw && existingRaw.value && existingRaw.value.content) {
+              const existingData = JSON.parse(existingRaw.value.content);
+              if (Array.isArray(existingData)) {
+                mergedData = mergeRiderData(existingData, groupData);
               }
             }
-          } catch (readErr) {
-            console.warn('DTR SAVE: Failed to read existing doc for', docId, readErr);
+          } catch (parseErr) {
+            console.warn('DTR SAVE: Failed to parse existing content for', docId, parseErr);
           }
 
           console.log('DTR SAVE: docId:', docId, 'existing+new merged rows:', mergedData.length);
-          // `kind` lets the reader query only DTR docs instead of downloading
-          // the whole dispatch_data collection. Old docs without it are still
-          // picked up by the fallback scan in loadDtrData().
-          await setDoc(docRef, {
+          await window.cloudflareAPI.set(docId, {
             content: JSON.stringify(mergedData),
             updated: new Date().toISOString(),
             kind: 'dtr',
             hub: hubName,
             date: dateStr
-          }, { merge: true });
+          });
         }
         return true;
       } catch (err) {
@@ -327,10 +319,6 @@
       }
     }
 
-    // The cheap `where('kind','==','dtr')` query can be refused by Firestore
-    // security rules, and records saved before the `kind` tag existed are
-    // invisible to it. So the full collection scan is the source of truth and
-    // the filtered query is only a shortcut — never the other way round.
     const FILTER_BLOCKED_KEY = 'dtr-filtered-query-blocked';
     const DTR_CACHE_KEY = 'dtr-rows-cache-v1';
     const DTR_CACHE_MAX = 4000000;
@@ -370,58 +358,28 @@
         renderRows(cached.rows, 'Loaded ' + cached.rows.length + ' rider records from cache — refreshing…');
       }
 
-      if (!firebaseEnabled()) {
+      if (!cloudflareEnabled()) {
         statusEl.innerHTML = cached
-          ? '<span class="muted">Firebase is not configured — showing cached records only.</span>'
-          : '<span class="error">Firebase is not configured, so DTR records cannot be loaded.</span>';
+          ? '<span class="muted">Cloudflare Worker is not configured — showing cached records only.</span>'
+          : '<span class="error">Cloudflare Worker is not configured, so DTR records cannot be loaded.</span>';
         return;
       }
       try {
         const docs = new Map();
-        let mode = 'filtered';
 
-        // 1. Shortcut: only the documents tagged with kind:'dtr'.
-        let filterBlocked = false;
-        try { filterBlocked = sessionStorage.getItem(FILTER_BLOCKED_KEY) === '1'; } catch (e) { /* ignore */ }
-        if (!filterBlocked) {
+        // List all DTR documents (key prefix 'dtr_').
+        const listed = await window.cloudflareAPI.list('dtr_');
+        const dtrKeys = (listed && listed.keys) || [];
+        console.log('DTR LOAD: found', dtrKeys.length, 'DTR documents');
+
+        for (const key of dtrKeys) {
           try {
-            const tagged = await getDocs(query(window.Auth.db, 'dispatch_data', where('kind', '==', 'dtr')));
-            tagged.forEach(d => { if (d.id.startsWith('dtr_')) docs.set(d.id, d.data()); });
+            const r = await window.cloudflareAPI.get(key);
+            if (!r || !r.value || !r.value.content) continue;
+            const data = r.value;
+            docs.set(key, data);
           } catch (e) {
-            // Rules that don't permit filtered lists reject this query. Stop
-            // retrying it and fall through to the full scan below.
-            mode = 'fullscan';
-            console.warn('DTR LOAD: filtered query not permitted, using a full scan.', e);
-            try { sessionStorage.setItem(FILTER_BLOCKED_KEY, '1'); } catch (err) { /* ignore */ }
-          }
-        } else {
-          mode = 'fullscan';
-        }
-
-        // 2. Source of truth. Runs whenever the shortcut came back empty, so
-        //    untagged legacy records can never be hidden by a stale cache flag.
-        let untagged = [];
-        if (docs.size === 0) {
-          mode = 'fullscan';
-          const all = await getDocs(collection(window.Auth.db, 'dispatch_data'));
-          const untaggedData = [];
-          all.forEach(d => {
-            if (!d.id.startsWith('dtr_')) return;
-            const data = d.data();
-            if (!data || !data.content) return;
-            docs.set(d.id, data);
-            if (data.kind !== 'dtr') untaggedData.push({ ref: d.ref, id: d.id });
-          });
-          untagged = untaggedData;
-          // Tag the untagged records so future loads can use the shortcut.
-          // `content` is never touched. This is best-effort and deliberately
-          // not awaited, so a slow write can never hold up the first paint.
-          if (untagged.length) {
-            console.log('DTR LOAD: tagging', untagged.length, 'legacy document(s)');
-            untagged.slice(0, 20).forEach(u => {
-              setDoc(u.ref, { kind: 'dtr' }, { merge: true })
-                .catch(e => console.warn('DTR LOAD: could not tag legacy doc', u.id, e));
-            });
+            console.warn('DTR LOAD: failed to read doc', key, e);
           }
         }
 
@@ -445,18 +403,15 @@
         if (allRows.length > 0) {
           allRows.sort((a, b) => new Date(a.rawTime || a.date) - new Date(b.rawTime || a.date));
           writeDtrCache(allRows);
-          renderRows(allRows, 'Loaded ' + allRows.length + ' rider records (from ' + docs.size +
-            ' documents, ' + mode + ')');
+          renderRows(allRows, 'Loaded ' + allRows.length + ' rider records (from ' + docs.size + ' documents)');
         } else if (cached) {
-          // The network read came back empty or failed midway — keep what we
-          // already painted rather than blanking the table.
-          statusEl.innerHTML = '<span class="error">No DTR records came back from Firebase (' +
-            docs.size + ' DTR document(s) read via ' + mode + '). Showing the last known copy — reload to retry.</span>';
+          statusEl.innerHTML = '<span class="error">No DTR records came back from Cloudflare Worker (' +
+            docs.size + ' DTR document(s) read). Showing the last known copy — reload to retry.</span>';
         } else {
           renderRows([], null);
-          console.warn('[DTR] no rider rows. documents=' + docs.size + ' mode=' + mode);
-          statusEl.innerHTML = '<span class="error">No DTR records in Firebase (' + docs.size +
-            ' DTR document(s) read via ' + mode + '). Upload a DTR CSV file to add records.</span>';
+          console.warn('[DTR] no rider rows. documents=' + docs.size);
+          statusEl.innerHTML = '<span class="error">No DTR records in Cloudflare Worker (' + docs.size +
+            ' DTR document(s) read). Upload a DTR CSV file to add records.</span>';
         }
       } catch (err) {
         console.error('DTR LOAD error:', err);
@@ -502,7 +457,7 @@
       });
     });
 
-    // Load previously saved DTR data from Firebase on page load.
+    // Load previously saved DTR data from Cloudflare Worker on page load.
     loadDtrData();
 
     function processCSVData(rows) {
@@ -551,13 +506,13 @@
       populateHubDropdown(globalRawData);
 
       if (processedList.length > 0) {
-        uploadStatusEl.textContent = 'Saving to Firebase…';
+        uploadStatusEl.textContent = 'Saving to Cloudflare Worker…';
         saveDtrData(processedList).then(function(saved) {
           if (saved) {
-            uploadStatusEl.textContent = 'Saved ' + processedList.length + ' new rider records (' + globalRawData.length + ' total) to Firebase';
-            showToast('Saved <b>' + processedList.length + '</b> new rider records to Firebase');
+            uploadStatusEl.textContent = 'Saved ' + processedList.length + ' new rider records (' + globalRawData.length + ' total) to Cloudflare Worker';
+            showToast('Saved <b>' + processedList.length + '</b> new rider records to Cloudflare Worker');
           } else {
-            uploadStatusEl.innerHTML = '<span class="muted">Firebase not connected — data displayed but not saved.</span>';
+            uploadStatusEl.innerHTML = '<span class="muted">Cloudflare Worker not connected — data displayed but not saved.</span>';
           }
         });
       }

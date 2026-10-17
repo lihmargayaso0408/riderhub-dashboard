@@ -1,0 +1,15 @@
+﻿name = "rider-performance"
+main = "cloudflare-worker.js"
+compatibility_date = "2024-10-01"
+
+[[r2_buckets]]
+binding = "ACCOUNTS"
+bucket_name = "accounts"
+
+[[r2_buckets]]
+binding = "DISPATCH_DATA"
+bucket_name = "dispatch-data"
+
+[[r2_buckets]]
+binding = "HUBS"
+bucket_name = "hubs"

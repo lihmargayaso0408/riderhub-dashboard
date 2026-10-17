@@ -4,16 +4,16 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Rider Ranking</title>
-  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  
 <link rel="preconnect" href="https://docs.google.com">
-<link rel="dns-prefetch" href="https://firestore.googleapis.com">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
-    <script src="firebase-config.js"></script>
+    <script src="cloudflare-config.js"></script>
 <script src="sw-register.js" defer></script>
-    <script type="module" src="firebase-client.js"></script>
+    <script type="module" src="cloudflare-api.js"></script>
     <script type="module" src="auth.js"></script>
     <style>
     body{padding:0;margin:0;}
@@ -185,13 +185,13 @@
 
     async function loadData() {
       try {
-        // Check if firebaseAPI is available
-        if (!window.firebaseAPI || !window.firebaseAPI.isEnabled()) {
-          statusEl.innerHTML = '<span class="error">Firebase not configured — cannot load ranking data.</span>';
+        // Check if cloudflareAPI is available
+        if (!window.cloudflareAPI || !window.cloudflareAPI.isEnabled()) {
+          statusEl.innerHTML = '<span class="error">Cloudflare Worker not configured — cannot load ranking data.</span>';
           return;
         }
 
-        // Load hub list from Firestore
+        // Load hub list from Cloudflare Worker
         const hubs = await window.Auth.getHubs();
         console.log('Available hubs:', hubs);
         const allData = [];
@@ -200,7 +200,7 @@
         // hub, then pull every hub's latest snapshot in parallel.
         let index = null;
         try {
-          const indexResult = await window.firebaseAPI.get('hubs-index');
+          const indexResult = await window.cloudflareAPI.get('hubs-index');
           if (indexResult && indexResult.value) index = JSON.parse(indexResult.value);
         } catch (e) {
           console.warn('Failed to load hubs index:', e);
@@ -212,7 +212,7 @@
               const dates = index[hub] || [];
               if (!dates.length) return [];
               const latestDate = dates.slice().sort().slice(-1)[0];
-              const snapResult = await window.firebaseAPI.get(`snapshot:${hub}:${latestDate}`);
+              const snapResult = await window.cloudflareAPI.get(`snapshot:${hub}:${latestDate}`);
               if (!snapResult || !snapResult.value) return [];
               const snap = JSON.parse(snapResult.value);
               if (snap && snap.rows) return snap.rows.map(r => Object.assign({}, r, { hub }));

@@ -4,16 +4,16 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Area Map — Rider Hubs</title>
-  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  
 <link rel="preconnect" href="https://docs.google.com">
-<link rel="dns-prefetch" href="https://firestore.googleapis.com">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <script src="firebase-config.js"></script>
+  <script src="cloudflare-config.js"></script>
 <script src="sw-register.js" defer></script>
-  <script type="module" src="firebase-client.js"></script>
+  <script type="module" src="cloudflare-api.js"></script>
   <script type="module" src="auth.js"></script>
   <link rel="preconnect" href="https://unpkg.com">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
@@ -363,7 +363,7 @@
 
     let allRows = [];
     let currentHub = 'All';
-    let hubsList = HUB_FALLBACK.slice(); // populated from Firestore after load
+    let hubsList = HUB_FALLBACK.slice(); // populated from Cloudflare Worker after load
 
     // Resolve the current hub list (dynamic Firestore list if loaded, else fallback).
     function currentHubs(){
@@ -385,20 +385,20 @@
     let placementToken = 0;
     let riderSuccessRate = {}; // riderName -> deliverySuccessRate (from performance data)
 
-    // Load performance snapshots from Firestore to build success rate lookup
+    // Load performance snapshots from the Cloudflare Worker to build success rate lookup
     async function loadPerformanceData() {
-      if (!window.firebaseAPI || !window.firebaseAPI.isEnabled || !window.firebaseAPI.isEnabled()) return;
+      if (!window.cloudflareAPI || !window.cloudflareAPI.isEnabled || !window.cloudflareAPI.isEnabled()) return;
       const hubs = currentHubs();
       for (const hub of hubs) {
         try {
           // Get summary to find latest date
-          const summaryRaw = await window.firebaseAPI.get(`summary:${hub}`, false);
+          const summaryRaw = await window.cloudflareAPI.get(`summary:${hub}`, false);
           if (!summaryRaw || !summaryRaw.value) continue;
           const summary = JSON.parse(summaryRaw.value);
           if (!summary || !summary.length) continue;
           // Get the latest date's snapshot
           const latestDate = summary[summary.length - 1].date;
-          const snapRaw = await window.firebaseAPI.get(`snapshot:${hub}:${latestDate}`, false);
+          const snapRaw = await window.cloudflareAPI.get(`snapshot:${hub}:${latestDate}`, false);
           if (!snapRaw || !snapRaw.value) continue;
           const snap = JSON.parse(snapRaw.value);
           if (snap && snap.rows) {
@@ -587,13 +587,13 @@
     }
 
     async function loadPlacedRiders() {
-      if (!window.firebaseAPI || !window.firebaseAPI.isEnabled || !window.firebaseAPI.isEnabled()) {
-        console.warn('[AreaMap] Firebase storage not enabled');
+      if (!window.cloudflareAPI || !window.cloudflareAPI.isEnabled || !window.cloudflareAPI.isEnabled()) {
+        console.warn('[AreaMap] Cloudflare storage not enabled');
         return [];
       }
       try {
-        const r = await window.firebaseAPI.get('area-map:placed-riders');
-        console.log('[AreaMap] Raw Firebase response:', r);
+        const r = await window.cloudflareAPI.get('area-map:placed-riders');
+        console.log('[AreaMap] Raw Cloudflare response:', r);
         const parsed = r ? JSON.parse(r.value) : [];
         console.log('[AreaMap] Loaded placed riders:', parsed.length, parsed);
         return parsed;
@@ -604,13 +604,13 @@
     }
 
     async function savePlacedRiders() {
-      if (!window.firebaseAPI || !window.firebaseAPI.isEnabled || !window.firebaseAPI.isEnabled()) {
-        console.warn('[AreaMap] Firebase storage not enabled, cannot save');
+      if (!window.cloudflareAPI || !window.cloudflareAPI.isEnabled || !window.cloudflareAPI.isEnabled()) {
+        console.warn('[AreaMap] Cloudflare storage not enabled, cannot save');
         return;
       }
       try {
         console.log('[AreaMap] Saving placed riders:', placedRiders.length);
-        await window.firebaseAPI.set('area-map:placed-riders', JSON.stringify(placedRiders));
+        await window.cloudflareAPI.set('area-map:placed-riders', JSON.stringify(placedRiders));
         console.log('[AreaMap] Save successful');
       } catch (e) { 
         console.error('[AreaMap] Failed to save placed riders:', e); 
