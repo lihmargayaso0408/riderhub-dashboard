@@ -1324,7 +1324,7 @@ if(c.type==='num1') return `<td class="num">${(r[c.key]||0).toFixed(1)}</td>`;
     }
   }
 
-  let pendingFile = null, pendingParsedRows = null;
+  let pendingFiles = [];
 
   function startOfWeek(date){
     const d = new Date(date);
@@ -1391,8 +1391,8 @@ cells.forEach((day, index)=>{
 function openModal(){
      $('#overlay').classList.add('show');
      $('#modalMsg').textContent = '';
-     $('#dropText').innerHTML = '<b>Click to choose</b> or drag a .csv file here';
-     pendingFile = null; pendingParsedRows = null;
+     $('#dropText').innerHTML = '<b>Click to choose</b> or drag .csv files here';
+     pendingFiles = [];
      $('#confirmUpload').disabled = true;
       const today = new Date();
       if(!$('#dateInput').value){ $('#dateInput').value = toISODate(today); }
@@ -1403,143 +1403,142 @@ function openModal(){
      const hubs = currentHubs();
       if(hubs.includes(state.currentHub)) $('#hubSelect').value = state.currentHub;
       else if(hubs.length) $('#hubSelect').value = hubs[0];
-      checkBridge();
     }
   function closeModal(){ $('#overlay').classList.remove('show'); }
 
-  function handleFile(file){
-    pendingFile = file;
-    pendingParsedRows = null;
-    $('#confirmUpload').disabled = true;
-    $('#dropText').innerHTML = `<b>${escapeHtml(file.name)}</b> selected`;
-    $('#modalMsg').textContent = 'Reading file…';
-    $('#modalMsg').className = 'modal-msg';
-    const m = file.name.match(/(\d{4}-\d{2}-\d{2})/);
-    if(m) {
-      const picked = new Date(m[1] + 'T00:00:00');
-      $('#dateInput').value = toISODate(picked);
-      state.weekPickerSelectedDate = toISODate(picked);
-      state.weekPickerMonth = new Date(picked.getFullYear(), picked.getMonth(), 1);
-      renderWeekPicker();
+  function extractDateFromFilename(fileName, hub){
+    let base = fileName.replace(/\.csv$/i, '').trim();
+    if(base.toLowerCase().startsWith(hub.toLowerCase() + ' ')){
+      base = base.slice(hub.length + 1).trim();
     }
+    const m = base.match(/(\d{4}-\d{2}-\d{2})/);
+    if(m) return m[1];
+    const parsed = new Date(base + ' ' + new Date().getFullYear());
+    if(!isNaN(parsed.getTime())) return toISODate(parsed);
+    return null;
+  }
 
-    const reader = new FileReader();
-    reader.onload = function(e){
-      try{
-        const res = parseCSVText(e.target.result);
-        pendingParsedRows = mapRows(res);
-        if(pendingParsedRows.length===0){
-          $('#modalMsg').textContent = 'No rider rows were found in this file. Make sure it\'s the unedited performance report CSV.';
-          $('#modalMsg').className = 'modal-msg err';
-          $('#confirmUpload').disabled = true;
-        } else {
-          $('#modalMsg').textContent = `Parsed ${pendingParsedRows.length} rider rows.`;
-          $('#modalMsg').className = 'modal-msg ok';
-          $('#confirmUpload').disabled = false;
+  function handleFiles(files){
+    if(!files || !files.length) return;
+    const hub = $('#hubSelect').value;
+    pendingFiles = [];
+    let totalRows = 0;
+    let failed = 0;
+    const fileList = [];
+
+    for(const file of Array.from(files)){
+      const reader = new FileReader();
+      reader.file = file;
+      reader.onload = function(e){
+        try{
+          const res = parseCSVText(e.target.result);
+          const rows = mapRows(res);
+          const date = extractDateFromFilename(file.name, hub) || $('#dateInput').value || new Date().toISOString().slice(0,10);
+          if(rows.length === 0){
+            failed++;
+          } else {
+            pendingFiles.push({ file: file.name, date, rows });
+            totalRows += rows.length;
+          }
+        }catch(err){
+          failed++;
         }
-      }catch(err){
-        $('#modalMsg').textContent = 'Could not read that file — check it is the standard performance report CSV. (' + (err && err.message ? err.message : 'parse error') + ')';
-        $('#modalMsg').className = 'modal-msg err';
-        $('#confirmUpload').disabled = true;
+        fileList.push(file.name);
+        if(fileList.length === files.length){
+          finalizeHandle(totalRows, failed);
+        }
+      };
+      reader.onerror = function(){
+        failed++;
+        fileList.push(file.name);
+        if(fileList.length === files.length){
+          finalizeHandle(totalRows, failed);
+        }
+      };
+      try{ reader.readAsText(file); }catch(err){
+        failed++;
+        fileList.push(file.name);
+        if(fileList.length === files.length){
+          finalizeHandle(totalRows, failed);
+        }
       }
-    };
-    reader.onerror = function(){
-      $('#modalMsg').textContent = 'Could not read that file from disk. Try selecting it again.';
-      $('#modalMsg').className = 'modal-msg err';
-      $('#confirmUpload').disabled = true;
-    };
-    try{
-      reader.readAsText(file);
-    }catch(err){
-      $('#modalMsg').textContent = 'Could not open that file. (' + (err && err.message ? err.message : 'unknown error') + ')';
-      $('#modalMsg').className = 'modal-msg err';
     }
   }
 
-  async function confirmUpload(){
-    if(!pendingParsedRows) return;
+  function finalizeHandle(totalRows, failed){
     const hub = $('#hubSelect').value;
-    const date = $('#dateInput').value;
-     if(!date){ $('#modalMsg').textContent='Pick a date.'; $('#modalMsg').className='modal-msg err'; return; }
+    $('#confirmUpload').disabled = pendingFiles.length === 0;
+    if(pendingFiles.length === 0){
+      $('#dropText').innerHTML = `<b>No valid CSV files.</b>`;
+      $('#modalMsg').textContent = failed ? `Could not parse ${failed} file(s).` : 'No files selected.';
+      $('#modalMsg').className = 'modal-msg err';
+      return;
+    }
+    const dates = [...new Set(pendingFiles.map(p=>p.date))].sort();
+    $('#dropText').innerHTML = `<b>${pendingFiles.length}</b> file(s) selected for <b>${escapeHtml(hub)}</b> — dates: ${dates.join(', ')}`;
+    $('#modalMsg').textContent = `Parsed ${totalRows} rider row(s) across ${pendingFiles.length} file(s).` + (failed ? ` (${failed} failed)` : '');
+    $('#modalMsg').className = 'modal-msg ok';
+  }
+
+  async function confirmUpload(){
+    if(!pendingFiles.length) return;
+    const hub = $('#hubSelect').value;
 
     const btn = $('#confirmUpload');
     btn.disabled = true;
     btn.textContent = 'Adding…';
 
-    try{
-      await saveSnapshot(hub, date, pendingParsedRows);
+    let okCount = 0;
+    let failCount = 0;
+    const summaryByHub = {};
 
-      if(!state.hubIndex[hub]) state.hubIndex[hub] = [];
-      if(!state.hubIndex[hub].includes(date)){
-        state.hubIndex[hub].push(date);
-        state.hubIndex[hub].sort();
+    try{
+      for(const pf of pendingFiles){
+        const date = pf.date;
+        if(!date){
+          failCount++;
+          continue;
+        }
+        await saveSnapshot(hub, date, pf.rows);
+
+        if(!state.hubIndex[hub]) state.hubIndex[hub] = [];
+        if(!state.hubIndex[hub].includes(date)){
+          state.hubIndex[hub].push(date);
+          state.hubIndex[hub].sort();
+        }
+
+        const daySummary = daySummaryFromRows(date, pf.rows);
+        if(!summaryByHub[hub]) summaryByHub[hub] = [];
+        summaryByHub[hub] = summaryByHub[hub].filter(s=>s.date!==date);
+        summaryByHub[hub].push(daySummary);
+        summaryByHub[hub].sort((a,b)=>a.date<b.date?-1:1);
+
+        okCount++;
       }
       await saveIndex(state.hubIndex);
 
-      const daySummary = daySummaryFromRows(date, pendingParsedRows);
-      let summaryArr = state.summaries[hub]||[];
-      summaryArr = summaryArr.filter(s=>s.date!==date);
-      summaryArr.push(daySummary);
-      summaryArr.sort((a,b)=>a.date<b.date?-1:1);
-      state.summaries[hub] = summaryArr;
-      await saveSummaryArr(hub, summaryArr);
+      for(const h of Object.keys(summaryByHub)){
+        let summaryArr = state.summaries[h]||[];
+        summaryArr = summaryArr.filter(s=> !summaryByHub[h].some(ns=>ns.date===s.date));
+        summaryArr = summaryArr.concat(summaryByHub[h]);
+        summaryArr.sort((a,b)=>a.date<b.date?-1:1);
+        state.summaries[h] = summaryArr;
+        await saveSummaryArr(h, summaryArr);
+      }
 
       closeModal();
-       showToast(`Added <b>${hub}</b> — ${fmtDate(date)} (${pendingParsedRows.length} riders)`);
+       showToast(`Added ${okCount} file(s) for <b>${escapeHtml(hub)}</b>.` + (failCount ? ` ${failCount} failed.` : ''));
 
       setActiveTab(hub);
-      state.currentDate = date;
+      if(pendingFiles.length) state.currentDate = pendingFiles[pendingFiles.length-1].date;
       await refreshView();
     }catch(err){
-      $('#modalMsg').textContent = 'Could not save this upload: ' + (err && err.message ? err.message : 'unknown error');
+      $('#modalMsg').textContent = 'Could not save uploads: ' + (err && err.message ? err.message : 'unknown error');
       $('#modalMsg').className = 'modal-msg err';
     }finally{
       btn.disabled = false;
       btn.textContent = 'Add to dashboard';
     }
-  }
-
-  function checkBridge(){
-    const status = $('#spxBridgeStatus');
-    const btn = $('#activateBridgeBtn');
-    const pullBtn = $('#pullSpxBtn');
-    if(typeof window.spxBridgePull === 'function'){
-      if(status){ status.textContent = 'Data pull: active'; status.style.color = 'var(--teal)'; }
-      if(pullBtn) pullBtn.disabled = false;
-      if(btn) btn.style.display = 'none';
-    } else {
-      if(status){ status.textContent = 'Data pull: not installed'; status.style.color = 'var(--brick)'; }
-      if(pullBtn) pullBtn.disabled = true;
-      if(btn) btn.style.display = 'inline-block';
-    }
-  }
-
-  function activateBridge(){
-    checkBridge();
-    if(typeof window.spxBridgePull === 'function'){
-      showToast('Data pull is active.');
-    } else {
-      showToast('Load the SPX Bridge extension in Chrome (chrome://extensions → Load unpacked, point at spx-bridge/).');
-    }
-  }
-
-  function pullFromSpx(){
-    const startDate = $('#dateInput').value || new Date().toISOString().slice(0, 10);
-    if(!startDate) return;
-    if(typeof window.spxBridgePull !== 'function'){
-      showToast('Data pull extension not installed.');
-      return;
-    }
-    const hub = $('#hubSelect').value;
-    showToast('Pulling data…');
-    window.spxBridgePull(hub, startDate)
-      .then(function(){
-        showToast('Data pulled.');
-        closeModal();
-      })
-      .catch(function(e){
-        showToast('Data pull failed: ' + (e && e.message ? e.message : e));
-      });
   }
 
   function showToast(html){
@@ -2203,16 +2202,14 @@ $('#downloadHubSelect').addEventListener('change', populateDownloadWeekOptions);
       });
     });
 
-    $('#fileInput').addEventListener('change', e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); });
+    $('#fileInput').addEventListener('change', e=>{ if(e.target.files.length) handleFiles(e.target.files); });
     $('#dropZone').addEventListener('dragover', e=>{ e.preventDefault(); $('#dropZone').classList.add('drag'); });
     $('#dropZone').addEventListener('dragleave', ()=>$('#dropZone').classList.remove('drag'));
     $('#dropZone').addEventListener('drop', e=>{
       e.preventDefault(); $('#dropZone').classList.remove('drag');
-      if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+      if(e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
     });
     $('#confirmUpload').addEventListener('click', confirmUpload);
-    $('#pullSpxBtn').addEventListener('click', pullFromSpx);
-    $('#activateBridgeBtn').addEventListener('click', activateBridge);
     $('#resetBtn').addEventListener('click', resetAll);
 
     $('#themeToggle').addEventListener('click', async ()=>{

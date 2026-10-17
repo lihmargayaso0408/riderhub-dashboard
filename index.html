@@ -209,7 +209,7 @@
 <div class="overlay" id="overlay">
   <div class="modal">
       <h3>Upload weekly manifest</h3>
-      <p class="hint">Drop in the weekly performance CSV. It gets added to the hub's history for the selected date — nothing gets overwritten unless the date matches.</p>
+      <p class="hint">Drop in one or more performance CSVs. The date is read from each file name (e.g. "Bauko Oct 12.csv"). Nothing gets overwritten unless the hub + date already exists.</p>
     <div class="field">
       <label for="hubSelect">Hub</label>
       <select id="hubSelect">
@@ -241,17 +241,12 @@
     </div>
     <div class="field">
       <label class="drop" id="dropZone" for="fileInput">
-        <input type="file" id="fileInput" accept=".csv" class="visually-hidden">
-        <div id="dropText"><b>Click to choose</b> or drag a .csv file here</div>
+        <input type="file" id="fileInput" accept=".csv" class="visually-hidden" multiple>
+        <div id="dropText"><b>Click to choose</b> or drag .csv files here</div>
       </label>
     </div>
     <div class="modal-msg" id="modalMsg"></div>
-    <div class="field" style="display:flex;align-items:center;gap:8px;">
-      <span id="spxBridgeStatus" style="font-size:11px;color:var(--text-dim);">Data pull: checking…</span>
-      <button class="btn-ghost" id="activateBridgeBtn" type="button" style="font-size:11px;padding:6px 10px;">Activate Data pull</button>
-    </div>
     <div class="modal-actions">
-      <button class="btn-ghost" id="pullSpxBtn">Data pull</button>
       <button class="btn-ghost" id="cancelUpload">Cancel</button>
       <button class="btn-primary" id="confirmUpload" disabled>Add to dashboard</button>
     </div>

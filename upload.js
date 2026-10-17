@@ -39,7 +39,6 @@
   var dropText = document.getElementById('dropText');
   var hubNameInput = document.getElementById('hubNameInput');
   var submitBtn = document.getElementById('submitBtn');
-  var pullSpxBtn = document.getElementById('pullSpxBtn');
   var statusPill = document.getElementById('statusPill');
   var statusText = document.getElementById('statusText');
   var summaryGrid = document.getElementById('summaryGrid');
@@ -316,15 +315,6 @@
     });
   }
 
-  if (pullSpxBtn) pullSpxBtn.addEventListener('click', function () {
-    var startDate = prompt('Start date (YYYY-MM-DD):', new Date().toISOString().slice(0, 10));
-    if (!startDate) return;
-    if (typeof window.spxBridgePull !== 'function') { showToast('Data pull extension not installed.'); return; }
-    setStatus('loading', 'Pulling data…');
-    window.spxBridgePull(hubNameInput.value || 'Bauko', startDate)
-      .then(function (r) { setStatus('success', 'Data pulled.'); showToast('Data pull complete.'); })
-      .catch(function (e) { setStatus('error', 'Data pull failed.'); showToast('Data pull failed: ' + (e.message || e)); });
-  });
   if (exportBtn) exportBtn.addEventListener('click', exportCsv);
   if (resetBtn) resetBtn.addEventListener('click', resetAll);
 
