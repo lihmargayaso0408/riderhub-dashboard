@@ -531,6 +531,7 @@ function fmtWeekLabel(d){
 
   function setActiveTab(hub){
     state.currentHub = hub;
+    state.currentDate = null; // always default to latest data for the selected hub
     const valueEl = $('#hubDropdownValue');
     const trigger = $('#hubDropdownTrigger');
     if(valueEl) valueEl.textContent = hub==='All' ? 'All Hubs' : hub;
