@@ -334,7 +334,6 @@ function getExportDates(hub){
     hubIndex: Object.fromEntries(HUB_FALLBACK.map(h => [h, []])),
     currentHub: 'All',
     currentDate: null,
-    frequency: 'weekly',
     rows: [],
     summaries: Object.fromEntries(HUB_FALLBACK.map(h => [h, []])),
     sortKey: 'deliverySuccessRate',
@@ -575,15 +574,6 @@ function allowedHubs(){
       if(!selDate) return null;
       const hd = state.hubIndex[hub] || [];
       if(!hd.length) return null;
-      if(state.frequency === 'monthly'){
-        const sel = new Date(selDate + 'T00:00:00');
-        const inMonth = hd.filter(d => {
-          const m = new Date(d + 'T00:00:00');
-          return m.getFullYear() === sel.getFullYear() && m.getMonth() === sel.getMonth();
-        });
-        return inMonth.length ? latestDate(inMonth) : latestDate(hd);
-      }
-      // weekly
       const wk = toISODate(startOfWeek(selDate));
       const inWeek = hd.filter(d => toISODate(startOfWeek(d)) === wk);
       return inWeek.length ? latestDate(inWeek) : latestDate(hd);
@@ -624,12 +614,8 @@ function allowedHubs(){
     // Hide drawer page buttons the user isn't allowed to access.
     const pages = perms.pages || Auth.ALL_PAGES.map(p=>p.key);
     const pageBtnMap = {
-      'riders': '#openRidersPageBtn',
       'loss': '#openLossReportBtn',
-      'pnr': '#openPnrPageBtn',
-      'dtr': '#openDtrPageBtn',
       'ranking': '#openRankingPageBtn',
-      'map': '#openAreaMapBtn',
       'accounts': '#openAccountsBtn'
     };
     Object.keys(pageBtnMap).forEach(function(key){
@@ -906,7 +892,8 @@ function allowedHubs(){
   function openCalendar(){
     const wrap = $('#datePickerWrap');
     const btn = $('#datePickerBtn');
-    if(!wrap) return;
+    const dropdown = $('#datePickerDropdown');
+    if(!wrap || !dropdown) return;
     wrap.classList.add('open');
     btn.setAttribute('aria-expanded','true');
     if(state.currentDate){
@@ -919,13 +906,42 @@ function allowedHubs(){
       calendarMonth = now.getMonth();
     }
     renderCalendar();
+
+    // Position fixed dropdown relative to the button, keeping it fully in viewport
+    const rect = btn.getBoundingClientRect();
+    const dWidth = dropdown.offsetWidth || 280;
+    const dHeight = dropdown.offsetHeight || 340;
+    const spaceBelow = window.innerHeight - rect.bottom - 8;
+    const spaceAbove = rect.top - 8;
+
+    // Horizontal: align left with button, flip right if needed
+    let left = rect.left;
+    if(left + dWidth > window.innerWidth - 8){
+      left = window.innerWidth - dWidth - 8;
+    }
+    if(left < 8) left = 8;
+
+    if(spaceBelow >= dHeight || spaceBelow >= spaceAbove){
+      dropdown.style.top = (rect.bottom + 8) + 'px';
+      dropdown.style.transformOrigin = 'top center';
+    } else {
+      dropdown.style.top = (rect.top - dHeight - 8) + 'px';
+      dropdown.style.transformOrigin = 'bottom center';
+    }
+    dropdown.style.left = left + 'px';
   }
 
   function closeCalendar(){
     const wrap = $('#datePickerWrap');
     const btn = $('#datePickerBtn');
+    const dropdown = $('#datePickerDropdown');
     if(wrap) wrap.classList.remove('open');
     if(btn) btn.setAttribute('aria-expanded','false');
+    if(dropdown){
+      dropdown.style.top = '';
+      dropdown.style.left = '';
+      dropdown.style.transformOrigin = '';
+    }
   }
 
   function toggleCalendar(){
@@ -1054,11 +1070,12 @@ function animateCountUp(el, target, isPct){
     const sum = key => rows.reduce((a,r)=>a+r[key],0);
 
     const kpis = [
-      {label:'Riders on manifest', value: fmtNum(rows.length), sub:`${active.length} active`, anim:'num'},
+      {label:'Riders on manifest', value: fmtNum(active.length), anim:'num'},
       {label:'Delivery success rate', value: fmtPct(avg('deliverySuccessRate')), cls: avg('deliverySuccessRate')>=90?'teal':(avg('deliverySuccessRate')<75?'brick':'' ), anim:'pct'},
       {label:'Attendance rate', value: fmtPct(avg('attendanceRate')), anim:'pct'},
-      {label:'Parcels delivered', value: fmtNum(sum('parcelsDelivered')), sub:`${fmtNum(sum('parcelsAssigned'))} assigned`, anim:'num'},
+      {label:'Parcels delivered', value: fmtNum(sum('parcelsDelivered')), anim:'num'},
       {label:'Parcels on hold', value: fmtNum(sum('parcelsOnHold')), cls: sum('parcelsOnHold')>0?'brick':'', anim:'num'},
+      {label:'Total parcels assigned', value: fmtNum(sum('parcelsAssigned')), anim:'num'},
     ];
 
     let html = '<div class="kpis">';
@@ -1558,16 +1575,8 @@ function openModal(){
 
       // Resolve the selected date to the actual stored snapshot date(s)
       let targetDates = [];
-      if(state.frequency === 'monthly'){
-        const sel = new Date(state.currentDate + 'T00:00:00');
-        targetDates = allDatesForCurrentHub().filter(d => {
-          const m = new Date(d + 'T00:00:00');
-          return m.getFullYear() === sel.getFullYear() && m.getMonth() === sel.getMonth();
-        });
-      } else {
-        const wk = toISODate(startOfWeek(state.currentDate));
-        targetDates = allDatesForCurrentHub().filter(d => toISODate(startOfWeek(d)) === wk);
-      }
+      const wk = toISODate(startOfWeek(state.currentDate));
+      targetDates = allDatesForCurrentHub().filter(d => toISODate(startOfWeek(d)) === wk);
 
 const deleteSet = new Set(targetDates);
       const hubsToDelete = (state.currentHub === 'All' ? currentHubs() : [state.currentHub]).filter(hub => {
@@ -1989,14 +1998,6 @@ function closeSettingsMenu(){
        if(wrap && !wrap.contains(e.target)) closeCalendar();
      });
 
-      $('#freqToggle').addEventListener('click', async e=>{
-        const btn = e.target.closest('.freq-btn');
-        if(!btn || btn.classList.contains('active')) return;
-        state.frequency = btn.dataset.freq;
-        $$('.freq-btn').forEach(b=>b.classList.toggle('active', b===btn));
-        await refreshView();
-      });
-
 function openSettingsMenu(){
       const drawer = $('#settingsDrawer');
       const backdrop = $('#drawerBackdrop');
@@ -2092,29 +2093,13 @@ const wheelBtn = $('#settingsToggle');
       closeSettingsMenu();
       openDownloadModal();
     });
-$('#openRidersPageBtn').addEventListener('click', ()=>{
-      closeSettingsMenu();
-      window.location.href = 'riders-agency.html';
-    });
 $('#openLossReportBtn').addEventListener('click', ()=>{
       closeSettingsMenu();
       window.location.href = 'loss-report.html';
     });
-    $('#openPnrPageBtn').addEventListener('click', ()=>{
-      closeSettingsMenu();
-      window.location.href = 'pnr.html';
-    });
-    $('#openDtrPageBtn').addEventListener('click', ()=>{
-      closeSettingsMenu();
-      window.location.href = 'riders-dtr.html';
-    });
-    $('#openRankingPageBtn').addEventListener('click', ()=>{
+$('#openRankingPageBtn').addEventListener('click', ()=>{
       closeSettingsMenu();
       window.location.href = 'rider-ranking.html';
-    });
-    $('#openAreaMapBtn').addEventListener('click', ()=>{
-      closeSettingsMenu();
-      window.location.href = 'area-map.html';
     });
     $('#cancelUpload').addEventListener('click', closeModal);
     $('#weekPrevBtn').addEventListener('click', ()=>{

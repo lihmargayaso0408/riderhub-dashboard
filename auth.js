@@ -12,11 +12,7 @@ function sortHubs(hubs) {
 }
 const ALL_ACTIONS = ['upload', 'delete', 'download'];
 const ALL_PAGES = [
-  { key: 'riders', file: 'riders-agency.html' },
   { key: 'loss', file: 'loss-report.html' },
-  { key: 'pnr', file: 'pnr.html' },
-  { key: 'dtr', file: 'riders-dtr.html' },
-  { key: 'map', file: 'area-map.html' },
   { key: 'ranking', file: 'rider-ranking.html' },
   { key: 'accounts', file: 'accounts.html' }
 ];

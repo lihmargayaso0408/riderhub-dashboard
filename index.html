@@ -82,10 +82,6 @@
         <div class="date-picker-grid" id="datePickerGrid"></div>
       </div>
     </div>
-      <div class="freq-toggle" id="freqToggle" role="group" aria-label="View frequency">
-        <button type="button" class="freq-btn active" data-freq="weekly">Weekly</button>
-        <button type="button" class="freq-btn" data-freq="monthly">Monthly</button>
-      </div>
     </div>
   </div>
 
@@ -134,41 +130,17 @@
       </span>
       <span class="drawer-label">Download records</span>
     </button>
-    <button class="drawer-item" id="openRidersPageBtn" type="button">
-      <span class="drawer-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="4"/><path d="M17 11a4 4 0 0 0 0-8"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M17 13a4 4 0 0 1 4 4v2"/></svg>
-      </span>
-      <span class="drawer-label">Riders &amp; Agency per hub</span>
-    </button>
     <button class="drawer-item" id="openLossReportBtn" type="button">
       <span class="drawer-icon" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M8 7l-4 4 4 4M16 7l4 4-4 4"/></svg>
       </span>
       <span class="drawer-label">Loss Report per hub</span>
     </button>
-    <button class="drawer-item" id="openPnrPageBtn" type="button">
-      <span class="drawer-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h2M8 17h6M12 11h4"/></svg>
-      </span>
-      <span class="drawer-label">PNR of Riders</span>
-    </button>
-    <button class="drawer-item" id="openDtrPageBtn" type="button">
-      <span class="drawer-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v6H8V2"/><path d="M8 10h8M8 14h8M8 18h5"/></svg>
-      </span>
-      <span class="drawer-label">Riders DTR</span>
-    </button>
     <button class="drawer-item" id="openRankingPageBtn" type="button">
       <span class="drawer-icon" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M19 9V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14"/><path d="m9 14 5-5 5 5"/></svg>
       </span>
       <span class="drawer-label">Rider Ranking</span>
-    </button>
-    <button class="drawer-item" id="openAreaMapBtn" type="button">
-      <span class="drawer-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3 3 6v15l6-3 6 3 6-3V3l-6 3-6-3z"/><path d="M9 3v15M15 6v15"/></svg>
-      </span>
-      <span class="drawer-label">Area Map</span>
     </button>
     <button class="drawer-item" id="openAccessBtn" type="button" style="display:none;">
       <span class="drawer-icon" aria-hidden="true">
@@ -366,7 +338,7 @@
 <script src="sw-register.js" defer></script>
 
 <!-- Charts (deferred so it doesn't block rendering) -->
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 
 <!-- Cloudflare Client (Module Script) -->
 <script type="module" src="cloudflare-api.js"></script>

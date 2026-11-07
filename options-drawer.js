@@ -80,11 +80,7 @@
 
     var drawerBody = '<div class="drawer-body">'
       + item('optHomeBtn', 'Rider Performance System', svgHome)
-      + item('optRidersBtn', 'Riders &amp; Agency per hub', svgRiders)
       + item('optLossBtn', 'Loss Report per hub', svgLoss)
-      + item('optPnrBtn', 'PNR of Riders', svgPnr)
-      + item('optDtrBtn', 'Riders DTR', svgDtr)
-       + item('optAreaBtn', 'Area Map', svgMap)
        + item('optAccountsBtn', 'Manage Accounts', svgAccounts)
        + item('optNewHubBtn', 'New Hub', svgNewHub)
        + item('optLogoutBtn', 'Log out', svgLogout)
@@ -220,18 +216,10 @@ function wireEvents() {
       return function () { closeMenu(); window.location.href = href; };
     };
     var home = document.getElementById('optHomeBtn');
-    var riders = document.getElementById('optRidersBtn');
     var loss = document.getElementById('optLossBtn');
-    var pnr = document.getElementById('optPnrBtn');
-    var dtr = document.getElementById('optDtrBtn');
-    var area = document.getElementById('optAreaBtn');
     var logout = document.getElementById('optLogoutBtn');
     if (home) home.addEventListener('click', go('index.html'));
-    if (riders) riders.addEventListener('click', go('riders-agency.html'));
     if (loss) loss.addEventListener('click', go('loss-report.html'));
-    if (pnr) pnr.addEventListener('click', go('pnr.html'));
-    if (dtr) dtr.addEventListener('click', go('riders-dtr.html'));
-    if (area) area.addEventListener('click', go('area-map.html'));
     var accounts = document.getElementById('optAccountsBtn');
     if (accounts) accounts.addEventListener('click', go('accounts.html'));
     var newHub = document.getElementById('optNewHubBtn');
@@ -355,14 +343,10 @@ function wireEvents() {
         // Admins get all pages; use profile.pages for everyone else
         var isAdmin = Auth.ADMIN_EMAILS && Auth.ADMIN_EMAILS.indexOf(String(u.email || '').toLowerCase()) !== -1;
         if (!isAdmin && profile && profile.pages && profile.pages.length) {
-          var pageMap = {
-            'optRidersBtn': 'riders',
-            'optLossBtn': 'loss',
-            'optPnrBtn': 'pnr',
-            'optDtrBtn': 'dtr',
-            'optAreaBtn': 'map',
-            'optAccountsBtn': 'accounts'
-          };
+var pageMap = {
+             'optLossBtn': 'loss',
+             'optAccountsBtn': 'accounts'
+           };
           Object.keys(pageMap).forEach(function(id){
             var el = document.getElementById(id);
             if (el && profile.pages.indexOf(pageMap[id]) === -1) {
