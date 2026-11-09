@@ -78,7 +78,13 @@
         <div class="status-box" id="rankingStatus">Loading data…</div>
       </div>
     </div>
-    <div class="tabs" id="hubTabs"></div>
+    <div class="hub-dropdown" id="rankingHubDropdown">
+      <button type="button" class="hub-dropdown-trigger" id="rankingHubTrigger" aria-haspopup="listbox" aria-expanded="false">
+        <span class="hub-dropdown-value" id="rankingHubValue">All Hubs</span>
+        <svg class="hub-dropdown-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="hub-dropdown-menu" id="rankingHubMenu" role="listbox"></div>
+    </div>
     <div class="stats-row" id="statsRow"></div>
     <div class="search-row">
       <input type="text" id="searchInput" placeholder="Search rider name or ID...">
@@ -113,7 +119,7 @@
     }
     const __perms = await window.Auth.guard('ranking');
     if (!__perms) throw new Error('redirect');
-    const HUB_FALLBACK = ['Bauko','Buguias','Irisan','Itogon','Itogon Tuding','Kapangan','La Trinidad Pico','MB Atok'];
+    const HUB_FALLBACK = ['Abra-Bucay','Bacarra','Badoc','Bangued','Bangui','Bantay','Bauko','Buguias','Candon','Dolores-Abra','Ilocos Sur','Ilocos Sur-Santa Lucia','Ilocos Sur-Santa Maria','Irisan','Itogon','Itogon Tuding','Kapangan','La Paz Abra','La Trinidad Pico','Laoag','MB Atok','Narvacan','North Laoag','San Nicolas','Santo Domingo','Tagudin'];
     const REMOVED_HUBS = ['MB Mankayan'];
 
     function isHubActive(hub) {
@@ -123,43 +129,63 @@
       return hubs.filter(isHubActive).slice().sort((a,b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
     }
 
-    function buildHubTabs(hubs){
-      const container = document.getElementById('hubTabs');
-      if (!container) return;
-      container.innerHTML = '';
-      const allBtn = document.createElement('button');
-      allBtn.type = 'button';
-      allBtn.className = 'tab-btn active';
-      allBtn.dataset.hub = 'All';
-      allBtn.textContent = 'All Hubs';
-      container.appendChild(allBtn);
-      (hubs || []).forEach(hub => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'tab-btn';
-        btn.dataset.hub = hub;
-        btn.textContent = hub;
-        container.appendChild(btn);
-      });
-      tabButtons.length = 0;
-      Array.from(container.querySelectorAll('.tab-btn')).forEach(b => tabButtons.push(b));
-      tabButtons.forEach(btn => {
-        btn.addEventListener('click', () => {
-          if (btn.dataset.hub === currentHub) return;
-          currentHub = btn.dataset.hub;
-          tabButtons.forEach(b => b.classList.toggle('active', b === btn));
-          statusEl.textContent = 'Loading data…';
-          renderStats();
-          renderRows();
+    function buildHubDropdown(hubs){
+      const menu = document.getElementById('rankingHubMenu');
+      if(!menu) return;
+      menu.innerHTML = '';
+      const search = document.createElement('input');
+      search.type='text'; search.placeholder='Search hubs…';
+      search.className='hub-dropdown-search';
+      search.setAttribute('aria-label','Filter hubs');
+      menu.appendChild(search);
+      const wrap = document.createElement('div');
+      wrap.className='hub-dropdown-options'; wrap.setAttribute('role','listbox');
+      function addOption(label, value){
+        const opt=document.createElement('button');
+        opt.type='button'; opt.className='hub-dropdown-option';
+        opt.dataset.value=value; opt.textContent=label; opt.setAttribute('role','option');
+        if(currentHub===value) opt.classList.add('active');
+        wrap.appendChild(opt);
+      }
+      addOption('All Hubs','All');
+      (hubs||[]).forEach(h=>{ addOption(h,h); });
+      menu.appendChild(wrap);
+      const ve=document.getElementById('rankingHubValue');
+      if(ve) ve.textContent = currentHub==='All' ? 'All Hubs' : (currentHub||'All Hubs');
+      function render(filter){
+        const f=(filter||'').toLowerCase();
+        wrap.querySelectorAll('.hub-dropdown-option').forEach(opt=>{
+          opt.style.display = opt.textContent.toLowerCase().includes(f)?'':'none';
         });
+      }
+      render('');
+      search.addEventListener('input', e=>render(e.target.value));
+      search.addEventListener('click', e=>e.stopPropagation());
+      wrap.addEventListener('click', e=>{
+        const opt=e.target.closest('.hub-dropdown-option');
+        if(!opt) return;
+        currentHub=opt.dataset.value;
+        const ve2=document.getElementById('rankingHubValue');
+        if(ve2) ve2.textContent = opt.dataset.value==='All'?'All Hubs':opt.textContent;
+        closeRankingHubDropdown();
+        statusEl.textContent = 'Loading data…';
+        renderStats(); renderRows();
       });
+    }
+
+    function openRankingHubDropdown(){
+      const m=document.getElementById('rankingHubMenu'); const t=document.getElementById('rankingHubTrigger');
+      if(m)m.classList.add('open'); if(t)t.setAttribute('aria-expanded','true');
+    }
+    function closeRankingHubDropdown(){
+      const m=document.getElementById('rankingHubMenu'); const t=document.getElementById('rankingHubTrigger');
+      if(m)m.classList.remove('open'); if(t)t.setAttribute('aria-expanded','false');
     }
 
     const statusEl = document.getElementById('rankingStatus');
     const rowsEl = document.getElementById('rankingRows');
     const statsRowEl = document.getElementById('statsRow');
     const searchEl = document.getElementById('searchInput');
-    const tabButtons = [];
     let allRows = [];
     let currentHub = 'All';
     let search = '';
@@ -168,15 +194,27 @@
 
     function applyHubFilter(){
       const allowed = (__perms && __perms.hubs && __perms.hubs.length) ? __perms.hubs : HUB_FALLBACK;
-      tabButtons.forEach(btn=>{
-        const hub = btn.dataset.hub;
-        const ok = hub === 'All' ? allowed.length > 1 : allowed.includes(hub);
-        btn.style.display = ok ? '' : 'none';
-      });
-      if(!(allowed.includes(currentHub) || (currentHub === 'All' && allowed.length > 1))){
-        currentHub = allowed.length > 1 ? 'All' : (allowed[0] || 'All');
-        tabButtons.forEach(b=>b.classList.toggle('active', b.dataset.hub===currentHub));
+      buildHubDropdown(allowed);
+      if(currentHub!=='All'){
+        currentHub = 'All';
       }
+      const ve=document.getElementById('rankingHubValue');
+      if(ve) ve.textContent = currentHub==='All'?'All Hubs':currentHub;
+    }
+
+    function wireRankingHubDropdown(){
+      const trigger=document.getElementById('rankingHubTrigger');
+      const menu=document.getElementById('rankingHubMenu');
+      if(!trigger||!menu) return;
+      trigger.addEventListener('click', e=>{
+        e.stopPropagation();
+        if(menu.classList.contains('open')) closeRankingHubDropdown();
+        else openRankingHubDropdown();
+      });
+      document.addEventListener('click', e=>{
+        if(menu.contains(e.target)) return;
+        closeRankingHubDropdown();
+      });
     }
 
     function normalizeHubName(value) {
@@ -385,7 +423,7 @@
     (async function start(){
       try {
         const hubs = await window.Auth.getHubs();
-        buildHubTabs(hubs);
+        buildHubDropdown(hubs);
         applyHubFilter();
         await loadData();
       } catch (err) {
@@ -395,10 +433,12 @@
         return;
       }
 
+      wireRankingHubDropdown();
+
       if (window.Auth && typeof window.Auth.onHubsChange === 'function') {
         try {
           window.Auth.onHubsChange(newHubs => {
-            buildHubTabs(newHubs);
+            buildHubDropdown(newHubs);
             applyHubFilter();
             loadData().catch(() => {});
           });

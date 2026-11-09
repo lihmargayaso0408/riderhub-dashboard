@@ -115,7 +115,7 @@ import { cachedFetchText } from './data-cache.js';
   /* ---------------- Storage helpers ---------------- */
   // Hubs are now loaded dynamically from the Cloudflare Worker (see Auth.getHubs()).
   // The hardcoded list is retained as a fallback when the Worker is unavailable.
-  const HUB_FALLBACK = ['Bauko','Buguias','Irisan','Itogon','Itogon Tuding','Kapangan','La Trinidad Pico','MB Atok'];
+  const HUB_FALLBACK = ['Abra-Bucay','Bacarra','Badoc','Bangued','Bangui','Bantay','Bauko','Buguias','Candon','Dolores-Abra','Ilocos Sur','Ilocos Sur-Santa Lucia','Ilocos Sur-Santa Maria','Irisan','Itogon','Itogon Tuding','Kapangan','La Paz Abra','La Trinidad Pico','Laoag','MB Atok','Narvacan','North Laoag','San Nicolas','Santo Domingo','Tagudin'];
   const REMOVED_HUBS = ['MB Mankayan'];
 
   function isHubActive(hub) {
@@ -345,6 +345,9 @@ function getExportDates(hub){
     trendChart: null,
     weekPickerMonth: new Date(),
     weekPickerSelectedDate: null,
+    dashMap: null,
+    dashMapLayer: null,
+    dashMapTileLayer: null,
   };
 
   const $ = sel => document.querySelector(sel);
@@ -585,13 +588,26 @@ function allowedHubs(){
     if(menu){
       menu.innerHTML = '';
       const allLabel = allowed.length > 1 ? 'All Hubs' : (allowed[0] || 'All');
+
+      const search = document.createElement('input');
+      search.type = 'text';
+      search.placeholder = 'Search hubs…';
+      search.className = 'hub-dropdown-search';
+      search.setAttribute('aria-label', 'Filter hubs');
+      menu.appendChild(search);
+
+      const optionsWrap = document.createElement('div');
+      optionsWrap.className = 'hub-dropdown-options';
+      optionsWrap.setAttribute('role', 'listbox');
+
       const allOpt = document.createElement('button');
       allOpt.type = 'button';
       allOpt.className = 'hub-dropdown-option active';
       allOpt.dataset.value = 'All';
       allOpt.textContent = allLabel;
       allOpt.setAttribute('role', 'option');
-      menu.appendChild(allOpt);
+      optionsWrap.appendChild(allOpt);
+
       allowed.forEach(hub => {
         const opt = document.createElement('button');
         opt.type = 'button';
@@ -599,9 +615,40 @@ function allowedHubs(){
         opt.dataset.value = hub;
         opt.textContent = hub;
         opt.setAttribute('role', 'option');
-        menu.appendChild(opt);
+        optionsWrap.appendChild(opt);
       });
+
+      menu.appendChild(optionsWrap);
+
+      function renderHubOptions(filter){
+        const f = (filter || '').toLowerCase();
+        optionsWrap.querySelectorAll('.hub-dropdown-option').forEach(opt=>{
+          opt.style.display = opt.textContent.toLowerCase().includes(f) ? '' : 'none';
+        });
+      }
+      renderHubOptions('');
+
+      search.addEventListener('input', (e)=>{ renderHubOptions(e.target.value); });
+      search.addEventListener('click', (e)=>{ e.stopPropagation(); });
     }
+
+    // Keep native hub <select> modals in sync with the full hub list.
+    ['hubSelect','downloadHubSelect'].forEach(id=>{
+      const sel = $(id);
+      if(!sel) return;
+      sel.innerHTML = '';
+      allowed.forEach(hub=>{
+        const o = document.createElement('option');
+        o.value = hub; o.textContent = hub;
+        sel.appendChild(o);
+      });
+      if(id === 'downloadHubSelect'){
+        const o = document.createElement('option');
+        o.value = 'All'; o.textContent = 'Both hubs';
+        sel.appendChild(o);
+      }
+    });
+
     state.currentHub = allowed.length>1 ? 'All' : (allowed[0]||'All');
     setActiveTab(state.currentHub);
 
@@ -616,7 +663,8 @@ function allowedHubs(){
     const pageBtnMap = {
       'loss': '#openLossReportBtn',
       'ranking': '#openRankingPageBtn',
-      'accounts': '#openAccountsBtn'
+      'accounts': '#openAccountsBtn',
+      'hub-location': '#openHubLocationBtn'
     };
     Object.keys(pageBtnMap).forEach(function(key){
       const sel = pageBtnMap[key];
@@ -632,6 +680,11 @@ function allowedHubs(){
       if(mb){
         mb.style.display='';
         mb.addEventListener('click', ()=>{ closeSettingsMenu(); window.location.href='accounts.html'; });
+      }
+      const hl = $('#openHubLocationBtn');
+      if(hl){
+        hl.style.display='';
+        hl.addEventListener('click', ()=>{ closeSettingsMenu(); window.location.href='hub-location.html'; });
       }
       const nh = $('#openNewHubBtn');
       if(nh){
@@ -1086,6 +1139,9 @@ function animateCountUp(el, target, isPct){
 
 html += '<div class="panels">';
     html += `<div class="panel"><h3>Vehicle types</h3><p class="hint">Rider count by vehicle type</p><div id="trendWrap"></div></div>`;
+    html += `<div class="panel dashboard-map-panel clickable-panel" id="hubMapPanel" role="link" tabindex="0" aria-label="Open hub location map">
+      <div class="dashboard-map-box" id="dashHubMapBox"><div id="dashHubMap"></div></div>
+    </div>`;
     html += '</div>';
 
 html += '<div class="strip">';
@@ -1117,6 +1173,7 @@ html += '<div class="strip">';
     });
 
 await renderTrend();
+    await renderDashMap();
     renderTopBottom(rows);
     setupTableControls(rows);
     renderTable();
@@ -1177,6 +1234,144 @@ await renderTrend();
     scrollEl.addEventListener('scroll', updateHint);
     window.addEventListener('resize', updateHint);
     setTimeout(updateHint, 0);
+  }
+
+  const HUB_COORDS = {
+    'Abra-Bucay': { lat: 17.54446322842846, lng: 120.7045626490105 },
+    'Bacarra': { lat: 18.269979007505793, lng: 120.60074583755949 },
+    'Badoc': { lat: 17.928801908586507, lng: 120.49239936710421 },
+    'Bangued': { lat: 17.594331744718165, lng: 120.61074196277289 },
+    'Bangui': { lat: 18.523454604839404, lng: 120.74589168248409 },
+    'Bantay': { lat: 17.589541346134034, lng: 120.41542646712173 },
+    'Bauko': { lat: 16.982200521109455, lng: 120.85290738245601 },
+    'Buguias': { lat: 16.810248946780597, lng: 120.82667944064907 },
+    'Candon': { lat: 17.193642371786282, lng: 120.43997919546042 },
+    'Dolores-Abra': { lat: 17.628883283224585, lng: 120.7279614266495 },
+    'Ilocos Sur-Santa Lucia': { lat: 17.113219352556087, lng: 120.44914608060348 },
+    'Ilocos Sur-Santa Maria': { lat: 17.365473705667814, lng: 120.48109405944436 },
+    'Irisan': { lat: 16.40605606033974, lng: 120.57641595175478 },
+    'Itogon': { lat: 16.36044606201804, lng: 120.63445890942711 },
+    'Itogon Tuding': { lat: 16.410220644695205, lng: 120.64207207451898 },
+    'Kapangan': { lat: 16.57547659520923, lng: 120.59649586895817 },
+    'La Paz Abra': { lat: 17.700786733350526, lng: 120.68681817485162 },
+    'La Trinidad Pico': { lat: 16.451761210816514, lng: 120.5825152861779 },
+    'Laoag': { lat: 18.18577302030684, lng: 120.57717140760387 },
+    'MB Atok': { lat: 16.6000, lng: 120.7500 },
+    'Narvacan': { lat: 17.439100640333923, lng: 120.46968792479134 },
+    'North Laoag': { lat: 18.204800770933083, lng: 120.61881030318959 },
+    'San Nicolas': { lat: 18.065335082050474, lng: 120.5616059266577 },
+    'Santo Domingo': { lat: 17.6167, lng: 120.4000 },
+    'Tagudin': { lat: 16.96809758139777, lng: 120.44889541129207 }
+  };
+  const LUZON_BOUNDS = [[14.2, 119.6], [19.1, 122.8]];
+  const LIGHT_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  const DARK_TILES = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+  const FALLBACK_TILES = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+  const NO_KEY_TILES = [
+    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
+  ];
+  let dashLeafletReady = null;
+  function ensureDashLeaflet(){
+    if (typeof L !== 'undefined') return Promise.resolve();
+    if (dashLeafletReady) return dashLeafletReady;
+    dashLeafletReady = new Promise((resolve) => {
+      const tryLoad = (url, next) => {
+        const s = document.createElement('script');
+        s.src = url; s.onload = () => resolve(true);
+        s.onerror = () => { if(next) next(); else resolve(false); };
+        document.head.appendChild(s);
+      };
+      tryLoad('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', () =>
+        tryLoad('https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js'));
+    });
+    return dashLeafletReady;
+  }
+
+  async function renderDashMap(){
+    const box = document.getElementById('dashHubMap');
+    const panel = document.getElementById('hubMapPanel');
+    if(!box || !panel) return;
+
+    const openMap = () => {
+      const hub = state.currentHub || 'All';
+      const q = (hub && hub !== 'All') ? ('?hub=' + encodeURIComponent(hub)) : '';
+      window.location.href = 'hub-location.html' + q;
+    };
+    if(!panel.dataset.wired){
+      panel.dataset.wired = '1';
+      panel.addEventListener('click', openMap);
+      panel.addEventListener('keydown', e => { if(e.key==='Enter'||e.key===' ') { e.preventDefault(); openMap(); } });
+    }
+
+    if(typeof L === 'undefined'){
+      await ensureDashLeaflet();
+      if(typeof L === 'undefined'){
+        box.innerHTML = '<div style="height:100%;min-height:180px;display:flex;align-items:center;justify-content:center;color:#8B9099;font-size:12px;text-align:center;padding:10px;">Map unavailable — click to open</div>';
+        return;
+      }
+    }
+
+    try {
+      // (re)bind to current element after #content re-renders
+      if(state.dashMap && state.dashMap.getContainer() !== box){
+        try{ state.dashMap.remove(); }catch(e){}
+        state.dashMap = null; state.dashMapLayer = null; state.dashMapTileLayer = null;
+      }
+      if(!state.dashMap){
+        box.innerHTML = '';
+        state.dashMap = L.map('dashHubMap', {
+          zoomControl: false, attributionControl: false,
+          dragging: false, scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false,
+          keyboard: false, tap: false, touchZoom: false
+        });
+        let tileErrs = 0;
+        const srcs = document.body.classList.contains('dark') ? [DARK_TILES, ...NO_KEY_TILES] : NO_KEY_TILES;
+        let srcIdx = 0;
+        const mountTiles = () => {
+          if(state.dashMapTileLayer) try{ state.dashMap.removeLayer(state.dashMapTileLayer); }catch(e){}
+          tileErrs = 0;
+          state.dashMapTileLayer = L.tileLayer(srcs[srcIdx], { maxZoom: 19, crossOrigin: true, errorTileUrl: '' }).addTo(state.dashMap);
+          state.dashMapTileLayer.on('tileerror', () => {
+            tileErrs++;
+            if(tileErrs > 3 && srcIdx < srcs.length - 1){ srcIdx++; mountTiles(); }
+            if(tileErrs > 6 && srcIdx >= srcs.length - 1){ try{ box.classList.add('tiles-failed'); }catch(e){} }
+          });
+          state.dashMapTileLayer.on('load', () => { box.dataset.tiles = 'ok'; box.classList.remove('tiles-failed'); });
+          state.dashMapTileLayer.bringToBack();
+        };
+        mountTiles();
+        state.dashMapLayer = L.layerGroup().addTo(state.dashMap);
+        box.classList.remove('tiles-failed');
+        const old = box.querySelector('.dash-map-note'); if(old) old.remove();
+      }
+
+      const dark = document.body.classList.contains('dark');
+      const tileUrl = dark ? DARK_TILES : LIGHT_TILES;
+      if(state.dashMapTileLayer && state.dashMapTileLayer._url !== tileUrl){
+        state.dashMap.removeLayer(state.dashMapTileLayer);
+        state.dashMapTileLayer = L.tileLayer(tileUrl, { maxZoom: 19, crossOrigin: true }).addTo(state.dashMap);
+        state.dashMapTileLayer.bringToBack();
+      }
+
+      state.dashMapLayer.clearLayers();
+      const hub = state.currentHub || 'All';
+      const bounds = L.latLngBounds(LUZON_BOUNDS[0], LUZON_BOUNDS[1]);
+      if(hub !== 'All' && HUB_COORDS[hub]){
+        const c = HUB_COORDS[hub];
+        L.circleMarker([c.lat, c.lng], { radius: 8, fillColor:'#00C878', fillOpacity:1, color:'#fff', weight:2 }).addTo(state.dashMapLayer);
+        state.dashMap.setView([c.lat, c.lng], 13, { animate: false });
+      } else {
+        Object.values(HUB_COORDS).forEach(c => L.circleMarker([c.lat, c.lng], { radius: 4, fillColor:'#00C878', fillOpacity:0.9, color:'#fff', weight:1 }).addTo(state.dashMapLayer));
+        state.dashMap.fitBounds(bounds, { padding: [8, 8], animate: false });
+      }
+      const fix = () => { try{ if(state.dashMap) state.dashMap.invalidateSize(); }catch(e){} };
+      setTimeout(fix, 0); setTimeout(fix, 80); setTimeout(fix, 250); setTimeout(fix, 600);
+      requestAnimationFrame(fix);
+    } catch (e) {
+      box.innerHTML = '<div style="height:100%;min-height:180px;display:flex;align-items:center;justify-content:center;color:#8B9099;font-size:12px;text-align:center;padding:10px;">Click to open map</div>';
+    }
   }
 
   async function renderTrend(){
@@ -1969,7 +2164,8 @@ function closeSettingsMenu(){
         state.currentDate = null;
         await refreshView();
       });
-      document.addEventListener('click', ()=>{
+      document.addEventListener('click', (e)=>{
+        if(menu && menu.contains(e.target)) return;
         closeHubDropdownMenu();
       });
     }

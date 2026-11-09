@@ -79,7 +79,13 @@
         <div class="status-box" id="sheetStatus">Loading sheet…</div>
       </div>
     </div>
-    <div class="tabs" id="hubTabs"></div>
+    <div class="hub-dropdown" id="lossHubDropdown">
+      <button type="button" class="hub-dropdown-trigger" id="lossHubTrigger" aria-haspopup="listbox" aria-expanded="false">
+        <span class="hub-dropdown-value" id="lossHubValue">All Hubs</span>
+        <svg class="hub-dropdown-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="hub-dropdown-menu" id="lossHubMenu" role="listbox"></div>
+    </div>
     <div class="stats-row" id="statsRow"></div>
 <div class="search-row">
       <input type="text" id="searchInput" placeholder="Search report date, loss party, status, sample, area cluster…">
@@ -125,7 +131,7 @@
     if (!__perms) throw new Error('redirect');
     const LOSS_SHEET_ID = '1Y-Okr8YoWQx-xbylmUHndT-xVTUtHzDP6cejtTOXzEU';
     const LOSS_SHEET_URL = `https://docs.google.com/spreadsheets/d/${LOSS_SHEET_ID}/gviz/tq?tqx=out:csv`;
-    const HUB_FALLBACK = ['Bauko','Buguias','Irisan','Itogon','Itogon Tuding','Kapangan','La Trinidad Pico','MB Atok'];
+    const HUB_FALLBACK = ['Abra-Bucay','Bacarra','Badoc','Bangued','Bangui','Bantay','Bauko','Buguias','Candon','Dolores-Abra','Ilocos Sur','Ilocos Sur-Santa Lucia','Ilocos Sur-Santa Maria','Irisan','Itogon','Itogon Tuding','Kapangan','La Paz Abra','La Trinidad Pico','Laoag','MB Atok','Narvacan','North Laoag','San Nicolas','Santo Domingo','Tagudin'];
     const HUB_NAME_MAP = {
       bauko: 'Bauko',
       buguias: 'Buguias',
@@ -147,30 +153,56 @@
       return HUB_FALLBACK.slice();
     }
 
-    function buildHubTabs(hubs){
-      const container = document.getElementById('hubTabs');
-      if (!container) return;
-      container.innerHTML = '';
-      (hubs || []).forEach(hub => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'tab-btn';
-        btn.dataset.hub = hub;
-        btn.textContent = hub;
-        container.appendChild(btn);
-      });
-      tabButtons.length = 0;
-      Array.from(container.querySelectorAll('.tab-btn')).forEach(b => tabButtons.push(b));
-      tabButtons.forEach(btn => {
-        btn.addEventListener('click', () => {
-          if (btn.dataset.hub === currentHub) return;
-          currentHub = btn.dataset.hub;
-          tabButtons.forEach(b => b.classList.toggle('active', b === btn));
-          populateMonthFilter();
-          renderStats();
-          renderRows();
+    function buildHubDropdown(hubs){
+      const menu = document.getElementById('lossHubMenu');
+      if(!menu) return;
+      menu.innerHTML = '';
+      const search = document.createElement('input');
+      search.type='text'; search.placeholder='Search hubs…';
+      search.className='hub-dropdown-search';
+      search.setAttribute('aria-label','Filter hubs');
+      menu.appendChild(search);
+      const wrap = document.createElement('div');
+      wrap.className='hub-dropdown-options'; wrap.setAttribute('role','listbox');
+      function addOption(label, value){
+        const opt=document.createElement('button');
+        opt.type='button'; opt.className='hub-dropdown-option';
+        opt.dataset.value=value; opt.textContent=label; opt.setAttribute('role','option');
+        if(currentHub===value) opt.classList.add('active');
+        wrap.appendChild(opt);
+      }
+      addOption('All Hubs','All');
+      (hubs||[]).forEach(h=>{ addOption(h,h); });
+      menu.appendChild(wrap);
+      const ve=document.getElementById('lossHubValue');
+      if(ve) ve.textContent = currentHub==='All' ? 'All Hubs' : (currentHub||'All Hubs');
+      function render(filter){
+        const f=(filter||'').toLowerCase();
+        wrap.querySelectorAll('.hub-dropdown-option').forEach(opt=>{
+          opt.style.display = opt.textContent.toLowerCase().includes(f)?'':'none';
         });
+      }
+      render('');
+      search.addEventListener('input', e=>render(e.target.value));
+      search.addEventListener('click', e=>e.stopPropagation());
+      wrap.addEventListener('click', e=>{
+        const opt=e.target.closest('.hub-dropdown-option');
+        if(!opt) return;
+        currentHub=opt.dataset.value;
+        const ve2=document.getElementById('lossHubValue');
+        if(ve2) ve2.textContent = opt.dataset.value==='All'?'All Hubs':opt.textContent;
+        closeLossHubDropdown();
+        populateMonthFilter(); renderStats(); renderRows();
       });
+    }
+
+    function openLossHubDropdown(){
+      const m=document.getElementById('lossHubMenu'); const t=document.getElementById('lossHubTrigger');
+      if(m)m.classList.add('open'); if(t)t.setAttribute('aria-expanded','true');
+    }
+    function closeLossHubDropdown(){
+      const m=document.getElementById('lossHubMenu'); const t=document.getElementById('lossHubTrigger');
+      if(m)m.classList.remove('open'); if(t)t.setAttribute('aria-expanded','false');
     }
 
     const statusEl = document.getElementById('sheetStatus');
@@ -178,27 +210,36 @@
     const statsRowEl = document.getElementById('statsRow');
     const searchEl = document.getElementById('searchInput');
     const monthFilterEl = document.getElementById('monthFilter');
-    const tabButtons = [];
     const sortableHeaders = Array.from(document.querySelectorAll('th[data-sort]'));
 
     function applyHubFilter(){
       const allowed = (__perms && __perms.hubs && __perms.hubs.length) ? __perms.hubs : hubsList;
-      tabButtons.forEach(btn=>{
-        const hub = btn.dataset.hub;
-        const ok = allowed.includes(hub);
-        btn.style.display = ok ? '' : 'none';
+      buildHubDropdown(allowed);
+      if(currentHub!=='All'){
+        currentHub = 'All';
+      }
+      const ve=document.getElementById('lossHubValue');
+      if(ve) ve.textContent = currentHub==='All'?'All Hubs':(currentHub||'All Hubs');
+    }
+
+    function wireLossHubDropdown(){
+      const trigger=document.getElementById('lossHubTrigger');
+      const menu=document.getElementById('lossHubMenu');
+      if(!trigger||!menu) return;
+      trigger.addEventListener('click', e=>{
+        e.stopPropagation();
+        if(menu.classList.contains('open')) closeLossHubDropdown();
+        else openLossHubDropdown();
       });
-      const visibleTabs = tabButtons.filter(btn => btn.style.display !== 'none');
-      const nextHub = allowed.find(hub => visibleTabs.some(btn => btn.dataset.hub === hub))
-        || visibleTabs[0]?.dataset.hub
-        || '';
-      if (currentHub !== nextHub) currentHub = nextHub;
-      tabButtons.forEach(b=>b.classList.toggle('active', b.dataset.hub===currentHub));
+      document.addEventListener('click', e=>{
+        if(menu.contains(e.target)) return;
+        closeLossHubDropdown();
+      });
     }
 
     let allRows = [];
     let hubsList = HUB_FALLBACK.slice();
-    let currentHub = '';
+    let currentHub = 'All';
     let sheetLoadSequence = 0;
     let search = '';
     let selectedMonth = '';
@@ -222,10 +263,8 @@
 
     function populateMonthFilter() {
       const months = new Set();
-      const currentHubName = normalizeHubName(currentHub);
-      const rowsForFilter = currentHubName
-        ? allRows.filter(r => normalizeHubName(r.hub) === currentHubName)
-        : allRows;
+      const currentHubName = currentHub==='All' ? null : normalizeHubName(currentHub);
+      const rowsForFilter = currentHubName ? allRows.filter(r => normalizeHubName(r.hub) === currentHubName) : allRows;
       rowsForFilter.forEach(r => {
         const key = getMonthKey(r.report_date);
         if (key) months.add(key);
@@ -547,16 +586,17 @@ sortableHeaders.forEach(th => {
     (async function start(){
       const hubs = await getHubsList();
       hubsList = hubs;
-      buildHubTabs(hubs);
+      buildHubDropdown(hubs);
       applyHubFilter();
       loadSheet();
+      wireLossHubDropdown();
 
       // Subscribe to hub changes so new hubs appear in real-time.
       if (window.Auth && typeof window.Auth.onHubsChange === 'function') {
         try {
           window.Auth.onHubsChange(newHubs => {
             hubsList = newHubs;
-            buildHubTabs(newHubs);
+            buildHubDropdown(newHubs);
             applyHubFilter();
             loadSheet();
           });

@@ -13,7 +13,7 @@
 //   • PapaParse (jsdelivr)      • Google Fonts
 //
 // Cloudflare Worker traffic never touches this worker.
-const VERSION = 'spx-vendor-v7';
+const VERSION = 'spx-vendor-v8';
 const VENDOR_CACHE = VERSION + '-vendor';
 
 const VENDOR_HOSTS = [

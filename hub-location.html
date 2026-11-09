@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hub Location — Rider Performance System</title>
+  <link rel="preconnect" href="https://docs.google.com">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';">
+  <!-- Inline Leaflet CSS fallback (in case CDN is blocked) -->
+  <style>
+    .leaflet-pane,.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow,.leaflet-tile-container,.leaflet-pane > svg,.leaflet-pane > canvas,.leaflet-zoom-box,.leaflet-image-layer,.leaflet-layer{position:absolute;left:0;top:0}
+    .leaflet-container{overflow:hidden;touch-action:none}
+    .leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow{user-select:none;-webkit-user-drag:none}
+    .leaflet-tile::selection{background:transparent}
+    .leaflet-safari .leaflet-tile{image-rendering:-webkit-optimize-contrast}
+    .leaflet-safari .leaflet-tile-container{width:1600px;height:1600px;-webkit-transform-origin:0 0;transform-origin:0 0}
+    .leaflet-marker-icon,.leaflet-marker-shadow{display:block}
+    .leaflet-container img.leaflet-image-layer{width:auto;min-width:0;max-width:none;height:auto;min-height:0;max-height:none}
+    .leaflet-container .leaflet-overlay-pane svg{max-width:none!important;max-height:none!important}
+    .leaflet-container .leaflet-marker-pane img,.leaflet-container .leaflet-shadow-pane img,.leaflet-container .leaflet-tile-pane img,.leaflet-container img.leaflet-image-layer{max-width:none!important;max-height:none!important;width:auto;padding:0}
+    .leaflet-zoom-box{width:0;height:0;box-sizing:border-box;z-index:800}
+    .leaflet-overlay-pane svg{-moz-user-select:none}
+    .leaflet-tile{filter:invert(0.95) hue-rotate(180deg) contrast(1.1);}
+    .leaflet-container{background:#0D0D0D;cursor:grab;cursor:-webkit-grab}
+    .leaflet-container a{background-color:transparent;text-decoration:none}
+    .leaflet-control{position:relative;z-index:800;pointer-events:auto}
+    .leaflet-top,.leaflet-bottom{position:absolute;z-index:1000;pointer-events:none}
+    .leaflet-top{top:0}.leaflet-bottom{bottom:0}
+    .leaflet-left{left:0}.leaflet-right{right:0}
+    .leaflet-control{float:left;clear:both}
+    .leaflet-right .leaflet-control{float:right}
+    .leaflet-zoom{top:10px;left:10px}
+    .leaflet-touch .leaflet-control-leaflet-touch .leaflet-zoom{top:5px;left:5px}
+    .leaflet-bar{box-shadow:0 1px 5px rgba(0,0,0,0.65);border-radius:4px;background:#1E222A;color:#E4E4E7}
+    .leaflet-bar a,.leaflet-bar a:hover{background-color:transparent;color:#E4E4E7;display:block;padding:8px 10px;text-decoration:none;text-align:center;border-bottom:1px solid #2E3440}
+    .leaflet-bar a:last-child{border-bottom:none;border-radius:0 0 4px 4px}
+    .leaflet-bar a:first-child{border-radius:4px 4px 0 0}
+    .leaflet-bar a:hover{background:#2A2F3A;color:#fff}
+    .leaflet-bar a.leaflet-disabled,.leaflet-bar a.leaflet-disabled:hover{background:#1E222A;color:#8B9099;cursor:default}
+    .leaflet-popup{position:absolute;text-align:center;margin-bottom:20px}
+    .leaflet-popup-content-wrapper{background:#1E222A;border-radius:8px;box-shadow:0 3px 14px rgba(0,0,0,0.4);padding:1px;text-align:left;color:#E4E4E7}
+    .leaflet-popup-content{margin:12px 16px;line-height:1.4}
+    .leaflet-popup-tip-container{position:absolute;left:50%;margin-left:-8px;top:-8px;width:16px;height:8px;pointer-events:none;overflow:hidden}
+    .leaflet-popup-tip{background:#1E222A;transform:rotate(45deg);-webkit-transform:rotate(45deg);width:16px;height:16px;position:absolute;left:50%;margin-left:-8px;top:-8px}
+    .leaflet-popup-scrolled{overflow:auto;border-bottom:1px solid #2E3440}
+    .leaflet-control-attribution{background:rgba(13,13,13,0.8);color:#8B9099;font-size:11px;padding:4px 8px;border-radius:4px}
+    .leaflet-control-attribution a{color:#FF7A5C;text-decoration:none}
+    .leaflet-control-attribution a:hover{text-decoration:underline}
+    .leaflet-container .leaflet-control-zoom{background:#1E222A;border:1px solid #2E3440;border-radius:6px;box-shadow:0 1px 5px rgba(0,0,0,0.65)}
+    .leaflet-container .leaflet-control-zoom a{background:#1E222A;color:#E4E4E7;border-bottom:1px solid #2E3440;display:block;padding:8px 12px;text-decoration:none;width:30px;height:30px;line-height:14px;text-align:center;font-size:16px;font-weight:bold}
+    .leaflet-container .leaflet-control-zoom a:last-child{border-bottom:none;border-radius:0 0 6px 6px}
+    .leaflet-container .leaflet-control-zoom a:first-child{border-radius:6px 6px 0 0}
+    .leaflet-container .leaflet-control-zoom a:hover{background:#2A2F3A;color:#fff}
+    .leaflet-container.leaflet-touch .leaflet-control-zoom a{width:36px;height:36px;font-size:20px}
+    .leaflet-div-icon{background:#1E222A;border:1px solid #2E3440}
+  </style>
+  <script src="cloudflare-config.js"></script>
+  <script type="module" src="cloudflare-api.js"></script>
+  <script src="sw-register.js" defer></script>
+  <script type="module" src="auth.js"></script>
+  <style>
+    body{padding:0;margin:0;}
+    .page-shell{max-width:1440px;margin:0 auto;padding:28px;}
+    .page-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;}
+    .page-head h1{font-family:'Space Grotesk',sans-serif;font-size:24px;margin:0;position:relative;padding-bottom:10px;}
+    .page-head h1::after{content:'';position:absolute;left:0;bottom:0;width:56px;height:3px;border-radius:999px;background:var(--grad-brand);}
+    .page-head p{margin:4px 0 0;color:var(--text-dim);font-size:13px;}
+    .status-box{background:var(--card);border:1px solid var(--line-2);border-radius:6px;padding:12px 14px;font-size:13px;color:var(--text-dim);}
+    .page-actions{display:flex;align-items:center;gap:10px;}
+    .back-link{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 12px;border-radius:999px;cursor:pointer;font-size:13px;text-decoration:none;transition:background .15s ease,border-color .15s ease;}
+    .back-link:hover{background:var(--hover);}
+    .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}
+    @media (max-width:700px){.stats-row{grid-template-columns:repeat(2,1fr);}}
+    .table-card{background:var(--card);border:1px solid var(--line-2);border-radius:8px;padding:16px;overflow:auto;}
+    table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:1000px;}
+    th, td{padding:9px 11px;border-bottom:1px solid var(--line-2);text-align:left;white-space:nowrap;}
+    th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);cursor:pointer;user-select:none;}
+    th:hover{color:var(--text);}
+    tbody tr{transition:background .12s ease;}
+    tbody tr:hover{background:var(--hover);}
+    .muted{color:var(--text-dim);}
+    .error{color:var(--brick);}
+    .num{font-family:'IBM Plex Mono',monospace;text-align:left;}
+    .num-header{text-align:left;}
+    .sr-high{color:var(--teal);}
+    .sr-mid{color:var(--teal);}
+    .sr-low{color:var(--teal);}
+    .hub-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap;background:rgba(238,77,45,.12);color:var(--amber-deep);}
+    .animate-in{animation:fadeUp .5s cubic-bezier(.22,.61,.36,1) both;}
+    .delay-1{animation-delay:.05s;}
+    .delay-2{animation-delay:.1s;}
+    .delay-3{animation-delay:.15s;}
+    .delay-4{animation-delay:.2s;}
+
+    /* Map styles */
+    .map-section{margin-bottom:16px;}
+    .map-card{background:var(--card);border:1px solid var(--line-2);border-radius:8px;overflow:hidden;height:520px;}
+    .map-card-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line-2);}
+    .map-card-header h3{margin:0;font-family:'Space Grotesk',sans-serif;font-size:16px;}
+    .map-wrapper{position:relative;height:100%;width:100%;}
+    #hubMap{height:100%;width:100%;border:2px solid var(--amber);background:#0D0D0D;position:relative;}
+    .map-legend{display:flex;gap:12px;flex-wrap:wrap;padding:10px 16px;font-size:12px;color:var(--text-dim);border-top:1px solid var(--line-2);background:var(--bg);}
+    .legend-item{display:flex;align-items:center;gap:6px;}
+    .legend-dot{width:12px;height:12px;border-radius:50%;}
+    .legend-dot.with-coords{background:var(--teal);}
+    .legend-dot.no-coords{background:var(--brick);opacity:0.6;}
+
+    /* Ensure map container has explicit dimensions */
+    #hubMap.leaflet-container{height:520px !important;width:100% !important;}
+
+    /* Hub Detail Panel */
+    .hub-detail-panel{
+      position:absolute;
+      top:12px;
+      right:12px;
+      width:280px;
+      max-height:calc(100% - 24px);
+      background:var(--card);
+      border:1px solid var(--line-2);
+      border-radius:10px;
+      box-shadow:0 8px 32px var(--shadow);
+      z-index:1000;
+      display:flex;
+      flex-direction:column;
+      overflow:hidden;
+      animation:slideInRight .3s cubic-bezier(.22,.61,.36,1);
+    }
+    @keyframes slideInRight{
+      from{opacity:0;transform:translateX(20px);}
+      to{opacity:1;transform:translateX(0);}
+    }
+    .hub-detail-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:12px 14px;
+      border-bottom:1px solid var(--line-2);
+      background:var(--bg);
+    }
+    .hub-detail-header h4{margin:0;font-family:'Space Grotesk',sans-serif;font-size:14px;color:var(--text);}
+    .hub-detail-close{
+      background:none;
+      border:none;
+      color:var(--text-dim);
+      font-size:20px;
+      cursor:pointer;
+      padding:0 4px;
+      line-height:1;
+      transition:color .15s;
+    }
+    .hub-detail-close:hover{color:var(--text);}
+    .hub-detail-body{padding:12px 14px;overflow-y:auto;}
+    .hub-detail-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line-2);}
+    .hub-detail-row:last-child{border-bottom:none;}
+    .hub-detail-label{font-size:12px;color:var(--text-dim);}
+    .hub-detail-value{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;color:var(--text);text-align:right;}
+    .hub-detail-row.highlight .hub-detail-label{color:var(--text);}
+    .hub-detail-row.highlight .hub-detail-value{color:var(--teal);font-size:14px;}
+    .hub-detail-divider{height:1px;background:var(--line-2);margin:8px 0;}
+    .hub-detail-footer{padding:10px 14px;border-top:1px solid var(--line-2);background:var(--bg);}
+    .hub-detail-source{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;}
+
+    /* Dark mode Leaflet fixes */
+    .leaflet-container{background:#1A1A1E;}
+    .leaflet-popup-content-wrapper{background:var(--card);color:var(--text);border-radius:8px;box-shadow:0 10px 24px var(--shadow);}
+    .leaflet-popup-content{margin:12px 16px;line-height:1.5;}
+    .leaflet-popup-tip{background:var(--card);}
+    .leaflet-control-zoom{background:var(--card);border:1px solid var(--line-2);border-radius:6px;}
+    .leaflet-control-zoom a{background:var(--card);color:var(--text);border-bottom:1px solid var(--line-2);}
+    .leaflet-control-zoom a:last-child{border-bottom:none;}
+    .leaflet-control-zoom a:hover{background:var(--hover);}
+    .leaflet-control-attribution{background:rgba(26,26,30,0.8);color:var(--text-dim);}
+    .hub-tooltip .leaflet-tooltip{background:var(--card);border:1px solid var(--line-2);border-radius:6px;box-shadow:0 4px 12px var(--shadow);color:var(--text);font-family:'IBM Plex Sans',sans-serif;font-size:11px;line-height:1.4;padding:6px 8px;}
+    .hub-tooltip .leaflet-tooltip-top::before{border-top-color:var(--card);}
+  </style>
+</head>
+<body class="dark">
+  <div class="page-shell">
+    <div class="page-head">
+      <div>
+        <h1>Hub Location</h1>
+        <p>View hub locations on the map</p>
+      </div>
+      <div class="page-actions">
+        <a class="back-link" href="index.html">← Back to Rider Performance System</a>
+        <div class="status-box" id="locationStatus">Loading…</div>
+      </div>
+    </div>
+
+    <div class="hub-dropdown" id="locationHubDropdown">
+      <button type="button" class="hub-dropdown-trigger" id="locationHubTrigger" aria-haspopup="listbox" aria-expanded="false">
+        <span class="hub-dropdown-value" id="locationHubValue">All Hubs</span>
+        <svg class="hub-dropdown-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="hub-dropdown-menu" id="locationHubMenu" role="listbox"></div>
+    </div>
+
+    <!-- Map Section -->
+    <div class="map-section">
+      <div class="map-card">
+        <div class="map-card-header">
+          <h3>Hub Map</h3>
+          <div class="map-legend" id="mapLegend"></div>
+        </div>
+        <div class="map-wrapper">
+          <div id="hubMap" style="height:100%;width:100%;border:2px solid var(--amber);background:#0D0D0D;position:relative;">
+            <div id="mapLoading" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:var(--text-dim);font-size:14px;pointer-events:none;z-index:1000;text-align:center;">
+              <div style="margin-bottom:8px;">Loading map...</div>
+              <div style="font-size:12px;color:var(--amber);">Waiting for Leaflet...</div>
+            </div>
+          </div>
+          <!-- Hub detail panel - appears on hub selection -->
+          <div id="hubDetailPanel" class="hub-detail-panel" style="display:none;">
+            <div class="hub-detail-header">
+              <h4 id="hubDetailName"></h4>
+              <button type="button" class="hub-detail-close" id="hubDetailClose" aria-label="Close">&times;</button>
+            </div>
+            <div class="hub-detail-body">
+              <div class="hub-detail-row">
+                <span class="hub-detail-label">Address</span>
+                <span class="hub-detail-value" id="hubDetailAddress">—</span>
+              </div>
+              <div class="hub-detail-row">
+                <span class="hub-detail-label">Region</span>
+                <span class="hub-detail-value" id="hubDetailRegion">—</span>
+              </div>
+              <div class="hub-detail-divider"></div>
+              <div class="hub-detail-row highlight">
+                <span class="hub-detail-label">Riders on Manifest</span>
+                <span class="hub-detail-value" id="hubDetailFleet">—</span>
+              </div>
+              <div class="hub-detail-row highlight">
+                <span class="hub-detail-label">Delivery SR</span>
+                <span class="hub-detail-value" id="hubDetailSR">—</span>
+              </div>
+              <div class="hub-detail-row">
+                <span class="hub-detail-label">Total Delivered</span>
+                <span class="hub-detail-value" id="hubDetailDelivered">—</span>
+              </div>
+              <div class="hub-detail-row">
+                <span class="hub-detail-label">Total Assigned</span>
+                <span class="hub-detail-value" id="hubDetailAssigned">—</span>
+              </div>
+              <div class="hub-detail-row">
+                <span class="hub-detail-label">On Hold</span>
+                <span class="hub-detail-value" id="hubDetailOnHold">—</span>
+              </div>
+            </div>
+            <div class="hub-detail-footer">
+              <span class="hub-detail-source">Data from Main Dashboard</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaflet JS - loaded dynamically in module script -->
+  <!-- <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';"></script> -->
+
+  <script type="module">
+    import { cachedFetchText } from './data-cache.js';
+
+    // Dynamically load Leaflet CSS
+    async function loadLeafletCSS() {
+      const tryLoad = async (href) => {
+        return new Promise((resolve, reject) => {
+          const link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = href;
+          link.onload = resolve;
+          link.onerror = reject;
+          document.head.appendChild(link);
+        });
+      };
+      
+      try {
+        await tryLoad('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
+      } catch {
+        try {
+          await tryLoad('https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css');
+        } catch {
+          console.warn('Failed to load Leaflet CSS from CDNs, using inline fallback');
+        }
+      }
+    }
+
+    // Dynamically load Leaflet to ensure it works with module context
+    async function loadLeaflet() {
+      if (typeof L !== 'undefined') return;
+      
+      const tryLoad = async (url) => {
+        return new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = url;
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.appendChild(script);
+        });
+      };
+      
+      try {
+        await tryLoad('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js');
+      } catch {
+        try {
+          await tryLoad('https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js');
+        } catch {
+          throw new Error('Failed to load Leaflet from all CDNs');
+        }
+      }
+    }
+
+    await loadLeafletCSS();
+    await loadLeaflet();
+
+    if (!window.Auth) {
+      document.getElementById('locationStatus').textContent =
+        'Could not start — the authentication module failed to load. Please refresh the page.';
+      throw new Error('auth unavailable');
+    }
+    const __perms = await window.Auth.guard('hub-location');
+    if (!__perms) throw new Error('redirect');
+
+    const HUB_FALLBACK = ['Abra-Bucay','Bacarra','Badoc','Bangued','Bangui','Bantay','Bauko','Buguias','Candon','Dolores-Abra','Ilocos Sur','Ilocos Sur-Santa Lucia','Ilocos Sur-Santa Maria','Irisan','Itogon','Itogon Tuding','Kapangan','La Paz Abra','La Trinidad Pico','Laoag','MB Atok','Narvacan','North Laoag','San Nicolas','Santo Domingo','Tagudin'];
+
+    // Predefined hub coordinates (Philippines)
+    const HUB_COORDINATES = {
+      'Abra-Bucay': { lat: 17.54446322842846, lng: 120.7045626490105, address: 'Bucay, Abra', region: 'Abra' },
+      'Bacarra': { lat: 18.269979007505793, lng: 120.60074583755949, address: 'Bacarra, Ilocos Norte', region: 'Ilocos Norte' },
+      'Badoc': { lat: 17.928801908586507, lng: 120.49239936710421, address: 'Badoc, Ilocos Norte', region: 'Ilocos Norte' },
+      'Bangued': { lat: 17.594331744718165, lng: 120.61074196277289, address: 'Bangued, Abra', region: 'Abra' },
+      'Bangui': { lat: 18.523454604839404, lng: 120.74589168248409, address: 'Bangui, Ilocos Norte', region: 'Ilocos Norte' },
+      'Bantay': { lat: 17.589541346134034, lng: 120.41542646712173, address: 'Bantay, Ilocos Sur', region: 'Ilocos Sur' },
+      'Bauko': { lat: 16.982200521109455, lng: 120.85290738245601, address: 'Bauko, Mountain Province', region: 'Mountain Province' },
+      'Buguias': { lat: 16.810248946780597, lng: 120.82667944064907, address: 'Buguias, Benguet', region: 'Benguet' },
+      'Candon': { lat: 17.193642371786282, lng: 120.43997919546042, address: 'Candon City, Ilocos Sur', region: 'Ilocos Sur' },
+      'Dolores-Abra': { lat: 17.628883283224585, lng: 120.7279614266495, address: 'Dolores, Abra', region: 'Abra' },
+      'Ilocos Sur-Santa Lucia': { lat: 17.113219352556087, lng: 120.44914608060348, address: 'Santa Lucia, Ilocos Sur', region: 'Ilocos Sur' },
+      'Ilocos Sur-Santa Maria': { lat: 17.365473705667814, lng: 120.48109405944436, address: 'Santa Maria, Ilocos Sur', region: 'Ilocos Sur' },
+      'Irisan': { lat: 16.40605606033974, lng: 120.57641595175478, address: 'Irisan, Baguio City', region: 'Benguet' },
+      'Itogon': { lat: 16.36044606201804, lng: 120.63445890942711, address: 'Itogon, Benguet', region: 'Benguet' },
+      'Itogon Tuding': { lat: 16.410220644695205, lng: 120.64207207451898, address: 'Tuding, Itogon, Benguet', region: 'Benguet' },
+      'Kapangan': { lat: 16.57547659520923, lng: 120.59649586895817, address: 'Kapangan, Benguet', region: 'Benguet' },
+      'La Paz Abra': { lat: 17.700786733350526, lng: 120.68681817485162, address: 'La Paz, Abra', region: 'Abra' },
+      'La Trinidad Pico': { lat: 16.451761210816514, lng: 120.5825152861779, address: 'Pico, La Trinidad, Benguet', region: 'Benguet' },
+      'Laoag': { lat: 18.18577302030684, lng: 120.57717140760387, address: 'Laoag City, Ilocos Norte', region: 'Ilocos Norte' },
+      'MB Atok': { lat: 16.6000, lng: 120.7500, address: 'Atok, Benguet', region: 'Benguet' },
+      'Narvacan': { lat: 17.439100640333923, lng: 120.46968792479134, address: 'Narvacan, Ilocos Sur', region: 'Ilocos Sur' },
+      'North Laoag': { lat: 18.204800770933083, lng: 120.61881030318959, address: 'North Laoag, Ilocos Norte', region: 'Ilocos Norte' },
+      'San Nicolas': { lat: 18.065335082050474, lng: 120.5616059266577, address: 'San Nicolas, Ilocos Norte', region: 'Ilocos Norte' },
+      'Santo Domingo': { lat: 17.6167, lng: 120.4000, address: 'Santo Domingo, Ilocos Sur', region: 'Ilocos Sur' },
+      'Tagudin': { lat: 16.96809758139777, lng: 120.44889541129207, address: 'Tagudin, Ilocos Sur', region: 'Ilocos Sur' }
+    };
+
+    // Philippines / Luzon views
+    const PH_CENTER = [16.5, 121.0];
+    const PH_ZOOM = 7;
+    let LUZON_BOUNDS = null;
+    function getLuzonBounds(){ if(!LUZON_BOUNDS && typeof L !== 'undefined') LUZON_BOUNDS = L.latLngBounds([14.2, 119.6], [19.1, 122.8]); return LUZON_BOUNDS; }
+
+    async function getHubsList(){
+      try {
+        if (window.Auth && typeof window.Auth.getHubs === 'function') {
+          const hubs = await window.Auth.getHubs();
+          if (hubs && hubs.length) return hubs;
+        }
+      } catch (e) { /* fall through */ }
+      return HUB_FALLBACK.slice();
+    }
+
+    function buildHubDropdown(hubs){
+      const menu = document.getElementById('locationHubMenu');
+      if(!menu) return;
+      menu.innerHTML = '';
+      const search = document.createElement('input');
+      search.type='text'; search.placeholder='Search hubs…';
+      search.className='hub-dropdown-search';
+      search.setAttribute('aria-label','Filter hubs');
+      menu.appendChild(search);
+      const wrap = document.createElement('div');
+      wrap.className='hub-dropdown-options'; wrap.setAttribute('role','listbox');
+      function addOption(label, value){
+        const opt=document.createElement('button');
+        opt.type='button'; opt.className='hub-dropdown-option';
+        opt.dataset.value=value; opt.textContent=label; opt.setAttribute('role','option');
+        if(currentHub===value) opt.classList.add('active');
+        wrap.appendChild(opt);
+      }
+      addOption('All Hubs','All');
+      (hubs||[]).forEach(h=>{ addOption(h,h); });
+      menu.appendChild(wrap);
+      const ve=document.getElementById('locationHubValue');
+      if(ve) ve.textContent = currentHub==='All' ? 'All Hubs' : (currentHub||'All Hubs');
+      function render(filter){
+        const f=(filter||'').toLowerCase();
+        wrap.querySelectorAll('.hub-dropdown-option').forEach(opt=>{
+          opt.style.display = opt.textContent.toLowerCase().includes(f)?'':'none';
+        });
+      }
+      render('');
+      search.addEventListener('input', e=>render(e.target.value));
+      search.addEventListener('click', e=>e.stopPropagation());
+      wrap.addEventListener('click', e=>{
+        const opt=e.target.closest('.hub-dropdown-option');
+        if(!opt) return;
+        const value = opt.dataset.value;
+        currentHub = value;
+        const ve2=document.getElementById('locationHubValue');
+        if(ve2) ve2.textContent = value==='All'?'All Hubs':opt.textContent;
+        closeLocationHubDropdown();
+        
+        // Update active state
+        wrap.querySelectorAll('.hub-dropdown-option').forEach(o => {
+          o.classList.toggle('active', o.dataset.value === value);
+        });
+        
+        if (value === 'All') {
+          hideHubDetailPanel();
+        } else {
+          showHubDetailPanel(value);
+          // Also zoom map to selected hub
+          const loc = allLocations.find(l => l.hubName === value);
+          if (loc && loc.lat && loc.lng && map) {
+            map.setView([loc.lat, loc.lng], 13);
+          }
+        }
+      });
+    }
+
+    function openLocationHubDropdown(){
+      const m=document.getElementById('locationHubMenu'); const t=document.getElementById('locationHubTrigger');
+      if(m)m.classList.add('open'); if(t)t.setAttribute('aria-expanded','true');
+    }
+    function closeLocationHubDropdown(){
+      const m=document.getElementById('locationHubMenu'); const t=document.getElementById('locationHubTrigger');
+      if(m)m.classList.remove('open'); if(t)t.setAttribute('aria-expanded','false');
+    }
+
+    function wireLocationHubDropdown(){
+      const trigger=document.getElementById('locationHubTrigger');
+      const menu=document.getElementById('locationHubMenu');
+      if(!trigger||!menu) return;
+      trigger.addEventListener('click', e=>{
+        e.stopPropagation();
+        if(menu.classList.contains('open')) closeLocationHubDropdown();
+        else openLocationHubDropdown();
+      });
+      document.addEventListener('click', e=>{
+        if(menu.contains(e.target)) return;
+        closeLocationHubDropdown();
+      });
+    }
+
+const statusEl = document.getElementById('locationStatus');
+    const mapLegendEl = document.getElementById('mapLegend');
+    const hubDetailPanel = document.getElementById('hubDetailPanel');
+    const hubDetailClose = document.getElementById('hubDetailClose');
+    const hubDetailName = document.getElementById('hubDetailName');
+    const hubDetailAddress = document.getElementById('hubDetailAddress');
+    const hubDetailRegion = document.getElementById('hubDetailRegion');
+    const hubDetailFleet = document.getElementById('hubDetailFleet');
+    const hubDetailSR = document.getElementById('hubDetailSR');
+    const hubDetailDelivered = document.getElementById('hubDetailDelivered');
+    const hubDetailAssigned = document.getElementById('hubDetailAssigned');
+    const hubDetailOnHold = document.getElementById('hubDetailOnHold');
+
+    let allLocations = [];
+    let hubSummaries = {}; // Store latest summary per hub
+    let hubsList = HUB_FALLBACK.slice();
+    let currentHub = 'All';
+    let map = null;
+    let markersLayer = null;
+
+function escapeHtml(value) {
+      const map = {'&':'&','<':'<','>':'>','"':'"',"'":String.fromCharCode(39)};
+      return String(value || '').replace(/[&<>"']/g, m => map[m]);
+    }
+
+    // Initialize Leaflet map
+    function initMap() {
+      if (map) return;
+      const mapContainer = document.getElementById('hubMap');
+      if (!mapContainer) {
+        console.error('Map container #hubMap not found');
+        return;
+      }
+      
+      console.log('initMap called, container found:', mapContainer);
+      console.log('Container dimensions:', mapContainer.offsetWidth, 'x', mapContainer.offsetHeight);
+      console.log('Leaflet (L) defined:', typeof L !== 'undefined');
+      
+      // Hide loading indicator
+      const loadingEl = document.getElementById('mapLoading');
+      if (loadingEl) loadingEl.style.display = 'none';
+      
+      try {
+        map = L.map('hubMap', {
+          center: PH_CENTER,
+          zoom: PH_ZOOM,
+          zoomControl: false,
+          attributionControl: true
+        });
+        console.log('Map created successfully');
+        console.log('Map container after init:', map.getContainer());
+        console.log('Map size:', map.getSize());
+
+        const tileOpts = { maxZoom: 19, crossOrigin: true, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' };
+        let tileErrors = 0;
+        const tileSources = [
+          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+          'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+        ];
+        let tileIdx = 0;
+        function addTiles(){
+          if (tileLayer) try { map.removeLayer(tileLayer); } catch(e){}
+          tileErrors = 0;
+          tileLayer = L.tileLayer(tileSources[tileIdx], tileOpts).addTo(map);
+          tileLayer.on('tileerror', () => {
+            tileErrors++;
+            if (tileErrors > 4 && tileIdx < tileSources.length - 1){
+              tileIdx++; addTiles();
+            } else             if (tileErrors > 8 && tileIdx >= tileSources.length - 1 && loadingEl){
+              loadingEl.style.display = 'none';
+            }
+            if (loadingEl && tileIdx < tileSources.length - 1) loadingEl.style.display = 'none';
+          });
+          tileLayer.on('load', () => { if (loadingEl) loadingEl.style.display = 'none'; });
+          tileLayer.bringToBack();
+        }
+        let tileLayer = null;
+        addTiles();
+        console.log('Tile layer added');
+
+        markersLayer = L.layerGroup().addTo(map);
+        console.log('Markers layer added');
+
+        // Force map to recalculate size multiple times
+        map.invalidateSize();
+        setTimeout(() => map.invalidateSize(), 50);
+        setTimeout(() => map.invalidateSize(), 200);
+        setTimeout(() => map.invalidateSize(), 500);
+      } catch (err) {
+        console.error('initMap error:', err);
+        if (loadingEl) loadingEl.innerHTML = '<div style="color:var(--brick);">Map failed to load: ' + err.message + '</div>';
+      }
+    }
+
+    // Create custom hub marker icon - using CircleMarker for reliability
+    function createHubMarker(lat, lng) {
+      return L.circleMarker([lat, lng], {
+        radius: 8,
+        fillColor: '#00C878',
+        fillOpacity: 1,
+        color: '#fff',
+        weight: 2,
+        opacity: 1
+      });
+    }
+
+    // Build allLocations from predefined coordinates
+    function buildAllLocations() {
+      allLocations = Object.entries(HUB_COORDINATES).map(([hubName, data]) => ({
+        hubName,
+        address: data.address,
+        region: data.region,
+        lat: data.lat,
+        lng: data.lng
+      }));
+    }
+
+    // Render map markers
+    function renderMap() {
+      if (!map) initMap();
+      if (!markersLayer) return;
+
+      markersLayer.clearLayers();
+
+      const locations = allLocations;
+      const validLocations = locations.filter(l => l.lat != null && l.lng != null && !isNaN(l.lat) && !isNaN(l.lng));
+
+      if (validLocations.length === 0) {
+        if (getLuzonBounds()) map.fitBounds(getLuzonBounds(), { padding: [12, 12] });
+        else map.setView(PH_CENTER, PH_ZOOM);
+        updateMapLegend(0, 0);
+        return;
+      }
+
+      // Add markers
+      validLocations.forEach(loc => {
+        const marker = createHubMarker(loc.lat, loc.lng).addTo(markersLayer);
+        
+        const summary = hubSummaries[loc.hubName] || {};
+        const fleet = summary.activeRiders || summary.riderCount || '—';
+        const sr = summary.deliverySR ? summary.deliverySR.toFixed(1) + '%' : '—';
+        
+        const tooltipContent = `
+          <div style="min-width:180px; padding:4px;">
+            <strong style="font-size:13px;color:#000;">${escapeHtml(loc.hubName)}</strong>
+            ${loc.address ? `<br><span style="color:var(--text-dim);font-size:11px;">${escapeHtml(loc.address)}</span>` : ''}
+            ${loc.region ? `<br><span style="color:var(--text-dim);font-size:11px;">${escapeHtml(loc.region)}</span>` : ''}
+            <br><span style="color:var(--text-dim);font-size:11px;">Riders on Manifest: ${fleet}</span>
+            <br><span style="color:var(--teal);font-size:11px;font-weight:600;">Delivery SR: ${sr}</span>
+          </div>
+        `;
+        
+        const popupContent = `
+          <div style="min-width:220px;">
+            <strong style="font-size:14px;color:#000;">${escapeHtml(loc.hubName)}</strong>
+            ${loc.address ? `<br><span style="color:var(--text-dim);font-size:12px;">${escapeHtml(loc.address)}</span>` : ''}
+            ${loc.region ? `<br><span style="color:var(--text-dim);font-size:12px;">${escapeHtml(loc.region)}</span>` : ''}
+            <br><span style="color:var(--text-dim);font-size:11px;">${loc.lat.toFixed(6)}, ${loc.lng.toFixed(6)}</span>
+          </div>
+        `;
+        
+        marker.bindTooltip(tooltipContent, {
+          permanent: false,
+          direction: 'top',
+          offset: [0, -10],
+          opacity: 0.95,
+          className: 'hub-tooltip'
+        });
+        marker.bindPopup(popupContent);
+      });
+
+      // Specific hub => zoom to it; All hubs => show Luzon map
+      const lb = getLuzonBounds();
+      if (currentHub !== 'All') {
+        const selectedLoc = validLocations.find(l => l.hubName === currentHub);
+        if (selectedLoc) {
+          map.setView([selectedLoc.lat, selectedLoc.lng], 13);
+        } else if (lb) {
+          map.fitBounds(lb, { padding: [12, 12] });
+        } else {
+          map.setView([16.5, 121.0], 7);
+        }
+      } else if (lb) {
+        map.fitBounds(lb, { padding: [12, 12] });
+      } else {
+        map.setView([16.5, 121.0], 7);
+      }
+
+      const total = locations.length;
+      const withCoords = validLocations.length;
+      updateMapLegend(total, withCoords);
+    }
+
+    function updateMapLegend(total, withCoords) {
+      const withoutCoords = total - withCoords;
+      mapLegendEl.innerHTML = `
+        <span class="legend-item"><span class="legend-dot with-coords"></span> With coordinates: ${withCoords}</span>
+        <span class="legend-item"><span class="legend-dot no-coords"></span> Missing coordinates: ${withoutCoords}</span>
+      `;
+    }
+
+    // Fetch hub summaries from Cloudflare Worker
+    async function fetchHubSummaries() {
+      if (!window.cloudflareAPI || !window.cloudflareAPI.isEnabled()) {
+        console.warn('Cloudflare API not available for fetching summaries');
+        return;
+      }
+      
+      try {
+        for (const hub of hubsList) {
+          try {
+            const result = await window.cloudflareAPI.get(`summary:${hub}`);
+            if (result && result.value) {
+              const summaries = JSON.parse(result.value);
+              if (summaries.length > 0) {
+                // Get the latest summary (last entry)
+                const latest = summaries[summaries.length - 1];
+                hubSummaries[hub] = {
+                  fleetCount: latest.riderCount || 0,
+                  activeRiders: latest.activeRiders || 0,
+                  deliverySR: latest.avgDeliverySuccess || 0,
+                  totalDelivered: latest.totalDelivered || 0,
+                  totalAssigned: latest.totalAssigned || 0,
+                  totalOnHold: latest.totalOnHold || 0
+                };
+              }
+            }
+          } catch (e) {
+            console.warn(`Failed to fetch summary for ${hub}:`, e);
+          }
+        }
+        console.log('Hub summaries loaded:', hubSummaries);
+      } catch (err) {
+        console.error('Failed to fetch hub summaries:', err);
+      }
+    }
+
+    function animateCountUp(el, target, isPct){
+      if(!el) return;
+      const targetNum = parseFloat(String(target).replace(/[^\d.\-]/g,''))||0;
+      const duration = 700;
+      const start = performance.now();
+      function frame(now){
+        const p = Math.min((now-start)/duration, 1);
+        const eased = 1 - Math.pow(1-p, 3);
+        const val = targetNum * eased;
+        el.textContent = isPct ? val.toFixed(1)+'%' : Math.round(val).toLocaleString();
+        if(p < 1) requestAnimationFrame(frame);
+        else el.textContent = target;
+      }
+      requestAnimationFrame(frame);
+    }
+
+    // Show hub detail panel
+    function showHubDetailPanel(hubName) {
+      const loc = allLocations.find(l => l.hubName === hubName);
+      if (!loc) return;
+      
+      const summary = hubSummaries[hubName] || {};
+      
+      hubDetailName.textContent = hubName;
+      hubDetailAddress.textContent = loc.address || '—';
+      hubDetailRegion.textContent = loc.region || '—';
+      hubDetailFleet.textContent = summary.activeRiders || summary.riderCount || '—';
+      hubDetailSR.textContent = summary.deliverySR ? summary.deliverySR.toFixed(1) + '%' : '—';
+      hubDetailDelivered.textContent = summary.totalDelivered ? summary.totalDelivered.toLocaleString() : '—';
+      hubDetailAssigned.textContent = summary.totalAssigned ? summary.totalAssigned.toLocaleString() : '—';
+      hubDetailOnHold.textContent = summary.totalOnHold ? summary.totalOnHold.toLocaleString() : '—';
+      
+      hubDetailPanel.style.display = 'flex';
+    }
+
+    // Hide hub detail panel
+    function hideHubDetailPanel() {
+      hubDetailPanel.style.display = 'none';
+      currentHub = 'All';
+      // Update dropdown display
+      const ve = document.getElementById('locationHubValue');
+      if (ve) ve.textContent = 'All Hubs';
+      // Update active state in dropdown
+      const menu = document.getElementById('locationHubMenu');
+      if (menu) {
+        menu.querySelectorAll('.hub-dropdown-option').forEach(opt => {
+          opt.classList.toggle('active', opt.dataset.value === 'All');
+        });
+      }
+      renderMap();
+    }
+
+    // Close button handler
+    if (hubDetailClose) {
+      hubDetailClose.addEventListener('click', hideHubDetailPanel);
+    }
+
+    if (typeof window.applySavedTheme === 'function') window.applySavedTheme();
+
+    (async function start(){
+      try {
+        const params = new URLSearchParams(location.search);
+        const requestedHub = params.get('hub');
+        const hubs = await getHubsList();
+        hubsList = hubs;
+        if (requestedHub && requestedHub !== 'All' && hubs.includes(requestedHub)) currentHub = requestedHub;
+        buildHubDropdown(hubs);
+        wireLocationHubDropdown();
+        buildAllLocations();
+
+        // Fetch hub summaries from Cloudflare Worker
+        await fetchHubSummaries();
+
+        // Initialize map early and explicitly
+        initMap();
+        if (currentHub !== 'All') showHubDetailPanel(currentHub);
+        renderMap();
+
+        statusEl.textContent = `Loaded ${allLocations.length} hub locations`;
+
+        if (window.Auth && typeof window.Auth.onHubsChange === 'function') {
+          try {
+            window.Auth.onHubsChange(newHubs => {
+              hubsList = newHubs;
+              buildHubDropdown(newHubs);
+              buildAllLocations();
+              fetchHubSummaries().then(() => {
+                renderMap();
+              });
+            });
+          } catch (e) { /* ignore */ }
+        }
+      } catch (err) {
+        console.error('Hub Location page failed to start:', err);
+        statusEl.innerHTML = '<span class="error">Could not load hub locations: ' +
+          (err && err.message ? err.message : 'unknown error') + '</span>';
+        return;
+      }
+    })();
+  </script>
+
+  <!-- Shared Option Button / Options drawer (appears on all pages) -->
+  <script src="options-drawer.js" defer></script>
+</body>
+</html>
+
+
+
+
+
