@@ -64,6 +64,40 @@
     .delay-2{animation-delay:.1s;}
     .delay-3{animation-delay:.15s;}
     .delay-4{animation-delay:.2s;}
+/* Vehicle type segment control */
+.vehicle-seg{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 10px 0;}
+.seg-btn{border:1px solid var(--line);background:var(--card);color:var(--text);padding:8px 14px;border-radius:999px;cursor:pointer;font-size:13px;font-family:'IBM Plex Mono',monospace;transition:background .15s ease,color .15s ease,border-color .15s ease,transform .15s ease;}
+.seg-btn:hover{border-color:var(--amber);transform:translateY(-1px);}
+.seg-btn.active{background:var(--grad-brand);color:var(--on-brand);border-color:transparent;box-shadow:0 4px 14px var(--glow);}
+/* Multi-hub dropdown checkboxes */
+.hub-check{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border:1px solid var(--line);border-radius:4px;margin-right:8px;flex-shrink:0;font-size:11px;}
+.hub-dropdown-option.active .hub-check{border-color:var(--brand);background:var(--brand);color:#fff;}
+.hub-dropdown-option .hub-check svg{width:10px;height:10px;}
+/* Filter chips */
+.filter-chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px 0;}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--hover);color:var(--text);padding:4px 10px;border-radius:999px;font-size:12px;cursor:pointer;font-family:'IBM Plex Mono',monospace;}
+.chip:hover{border-color:var(--amber);background:var(--card);}
+.chip span{color:var(--text-dim);font-weight:700;line-height:1;}
+/* Top / bottom 10 boxes */
+.top10-wrap{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin:0 0 16px 0;}
+@media (max-width:700px){.top10-wrap{grid-template-columns:1fr;}}
+.top10-panel{background:var(--card);border:1px solid var(--line-2);border-radius:8px;padding:14px;overflow:auto;}
+.top10-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.top10-head h3{margin:0;font-family:'Space Grotesk',sans-serif;font-size:15px;}
+.top10-head .tag{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-dim);font-weight:600;padding:3px 8px;border:1px solid var(--line);border-radius:999px;background:var(--hover);}
+.top10-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px;}
+.top10-item{display:flex;align-items:center;gap:10px;padding:7px 10px;border:1px solid var(--line-2);border-radius:6px;background:var(--hover);}
+.top10-rank{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:12px;flex-shrink:0;}
+.top10-rank.high{background:var(--grad-brand);color:var(--on-brand);box-shadow:0 0 12px var(--glow);}
+.top10-rank.low{background:var(--brick);color:#fff;}
+.top10-info{flex:1;min-width:0;}
+.top10-info .top10-info-name{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.top10-info .top10-info-meta{font-size:11px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.top10-info .top10-info-meta span{color:var(--text-dim);}
+.top10-val{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:13px;white-space:nowrap;text-align:right;}
+.top10-empty{text-align:center;padding:30px;color:var(--text-dim);font-size:13px;}
+/* Smooth delivery-success color transition: red (low) → green (high) */
+.rate-num{font-family:'IBM Plex Mono',monospace;font-weight:700;transition:color .25s ease;}
   </style>
 </head>
 <body class="dark">
@@ -85,7 +119,10 @@
       </button>
       <div class="hub-dropdown-menu" id="rankingHubMenu" role="listbox"></div>
     </div>
+    <div class="vehicle-seg" id="rankingVehicleSeg"></div>
+    <div class="filter-chips" id="rankingFilterChips"></div>
     <div class="stats-row" id="statsRow"></div>
+    <div class="top10-wrap" id="rankingTop10Wrap"></div>
     <div class="search-row">
       <input type="text" id="searchInput" placeholder="Search rider name or ID...">
     </div>
@@ -129,6 +166,50 @@
       return hubs.filter(isHubActive).slice().sort((a,b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
     }
 
+    const statusEl = document.getElementById('rankingStatus');
+    const rowsEl = document.getElementById('rankingRows');
+    const statsRowEl = document.getElementById('statsRow');
+    const tableCardEl = document.getElementById('tableCard');
+    const searchEl = document.getElementById('searchInput');
+    const top10WrapEl = document.getElementById('rankingTop10Wrap');
+    let allRows = [];
+    let currentHubs = new Set(['All']);
+    let currentVehicleGroups = new Set(['all']);
+    let search = '';
+    let sortKey = 'deliverySuccessRate';
+    let sortDir = 'desc';
+
+    const VEHICLE_GROUPS = [
+      { key: 'all', label: 'All Vehicles' },
+      { key: '4w', label: '4WAUV &amp; 4WSML', types: ['4wauv','4wsml'] },
+      { key: '3w', label: '3WC &amp; 3WL', types: ['3wc','3wl'] },
+      { key: '2w', label: '2WH', types: ['2wh'] },
+      { key: 'flexi', label: 'Flexi', types: ['flexi'] },
+    ];
+
+    function vehicleGroupKey(vehicleType) {
+      const v = String(vehicleType || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+      for (const g of VEHICLE_GROUPS) {
+        if (g.types && g.types.includes(v)) return g.key;
+      }
+      return 'other';
+    }
+
+    function vehicleGroupLabel(key) {
+      const g = VEHICLE_GROUPS.find(g => g.key === key);
+      return g ? g.label : key;
+    }
+
+    function applyHubFilter(hubs){
+      const allowed = (__perms && __perms.hubs && __perms.hubs.length) ? __perms.hubs : (hubs || HUB_FALLBACK);
+      buildHubDropdown(allowed);
+      currentHubs = new Set(['All']);
+      currentVehicleGroups = new Set(['all']);
+      const ve=document.getElementById('rankingHubValue');
+      if(ve) ve.textContent = 'All Hubs';
+      renderFilterChips();
+    }
+
     function buildHubDropdown(hubs){
       const menu = document.getElementById('rankingHubMenu');
       if(!menu) return;
@@ -140,18 +221,30 @@
       menu.appendChild(search);
       const wrap = document.createElement('div');
       wrap.className='hub-dropdown-options'; wrap.setAttribute('role','listbox');
-      function addOption(label, value){
+      function addOption(label, value, checked){
         const opt=document.createElement('button');
         opt.type='button'; opt.className='hub-dropdown-option';
-        opt.dataset.value=value; opt.textContent=label; opt.setAttribute('role','option');
-        if(currentHub===value) opt.classList.add('active');
+        opt.dataset.value=value; opt.setAttribute('role','option');
+        if(checked) opt.classList.add('active');
+        const box=document.createElement('span'); box.className='hub-check';
+        box.innerHTML = checked ? '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : '';
+        opt.appendChild(box);
+        const span=document.createElement('span'); span.textContent=label;
+        opt.appendChild(span);
         wrap.appendChild(opt);
       }
-      addOption('All Hubs','All');
-      (hubs||[]).forEach(h=>{ addOption(h,h); });
+      const isAll = currentHubs.has('All') || currentHubs.size === 0;
+      addOption('All Hubs','All', isAll);
+      (hubs||[]).forEach(h=>{ addOption(h,h, currentHubs.has(h)); });
       menu.appendChild(wrap);
       const ve=document.getElementById('rankingHubValue');
-      if(ve) ve.textContent = currentHub==='All' ? 'All Hubs' : (currentHub||'All Hubs');
+      function updateTrigger(){
+        if(!ve) return;
+        if(currentHubs.has('All') || currentHubs.size===0){ ve.textContent='All Hubs'; return; }
+        const names = [...currentHubs].filter(h=>h!=='All');
+        ve.textContent = names.length > 3 ? names.length + ' hubs' : names.join(', ');
+      }
+      updateTrigger();
       function render(filter){
         const f=(filter||'').toLowerCase();
         wrap.querySelectorAll('.hub-dropdown-option').forEach(opt=>{
@@ -164,12 +257,31 @@
       wrap.addEventListener('click', e=>{
         const opt=e.target.closest('.hub-dropdown-option');
         if(!opt) return;
-        currentHub=opt.dataset.value;
-        const ve2=document.getElementById('rankingHubValue');
-        if(ve2) ve2.textContent = opt.dataset.value==='All'?'All Hubs':opt.textContent;
-        closeRankingHubDropdown();
-        statusEl.textContent = 'Loading data…';
-        renderStats(); renderRows();
+        e.stopPropagation();
+        e.preventDefault();
+        const menuEl = document.getElementById('rankingHubMenu');
+        const dropdownScroll = wrap ? wrap.scrollTop : 0;
+        const tableScroll = tableCardEl ? tableCardEl.scrollTop : 0;
+        const val=opt.dataset.value;
+        if(val === 'All'){
+          currentHubs = new Set(['All']);
+        } else {
+          currentHubs.delete('All');
+          if(currentHubs.has(val)) currentHubs.delete(val);
+          else currentHubs.add(val);
+          if(currentHubs.size === 0) currentHubs.add('All');
+        }
+        buildHubDropdown(hubs);
+        updateTrigger();
+          renderFilterChips();
+          renderStats(); renderRows();
+          renderTop10();
+        const newWrap = menuEl ? menuEl.querySelector('.hub-dropdown-options') : null;
+        if(newWrap) newWrap.scrollTop = dropdownScroll;
+        if (tableCardEl) {
+          tableCardEl.scrollTop = tableScroll;
+          requestAnimationFrame(() => { tableCardEl.scrollTop = tableScroll; });
+        }
       });
     }
 
@@ -182,43 +294,104 @@
       if(m)m.classList.remove('open'); if(t)t.setAttribute('aria-expanded','false');
     }
 
-    const statusEl = document.getElementById('rankingStatus');
-    const rowsEl = document.getElementById('rankingRows');
-    const statsRowEl = document.getElementById('statsRow');
-    const searchEl = document.getElementById('searchInput');
-    let allRows = [];
-    let currentHub = 'All';
-    let search = '';
-    let sortKey = 'deliverySuccessRate';
-    let sortDir = 'desc';
-
-    function applyHubFilter(){
-      const allowed = (__perms && __perms.hubs && __perms.hubs.length) ? __perms.hubs : HUB_FALLBACK;
-      buildHubDropdown(allowed);
-      if(currentHub!=='All'){
-        currentHub = 'All';
-      }
-      const ve=document.getElementById('rankingHubValue');
-      if(ve) ve.textContent = currentHub==='All'?'All Hubs':currentHub;
-    }
-
-    function wireRankingHubDropdown(){
-      const trigger=document.getElementById('rankingHubTrigger');
-      const menu=document.getElementById('rankingHubMenu');
-      if(!trigger||!menu) return;
-      trigger.addEventListener('click', e=>{
-        e.stopPropagation();
-        if(menu.classList.contains('open')) closeRankingHubDropdown();
-        else openRankingHubDropdown();
-      });
-      document.addEventListener('click', e=>{
-        if(menu.contains(e.target)) return;
-        closeRankingHubDropdown();
-      });
-    }
-
     function normalizeHubName(value) {
       return String(value || '').trim().toLowerCase().replace(/\s+hub\s*$/i, '').replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+
+    function renderVehicleSeg(){
+      const container = document.getElementById('rankingVehicleSeg');
+      if(!container) return;
+      container.innerHTML = VEHICLE_GROUPS.map(g=>{
+        const active = currentVehicleGroups.has(g.key);
+        return `<button type="button" class="seg-btn ${active?'active':''}" data-group="${g.key}">${g.label}</button>`;
+      }).join('');
+      container.querySelectorAll('.seg-btn').forEach(btn=>{
+        btn.addEventListener('click',()=>{
+          const key = btn.dataset.group;
+          if(key === 'all'){
+            currentVehicleGroups = new Set(['all']);
+          } else {
+            currentVehicleGroups.delete('all');
+            if(currentVehicleGroups.has(key)) currentVehicleGroups.delete(key);
+            else currentVehicleGroups.add(key);
+            if(currentVehicleGroups.size === 0) currentVehicleGroups.add('all');
+          }
+          renderVehicleSeg();
+          renderFilterChips();
+          renderStats(); renderRows();
+          renderTop10();
+        });
+      });
+    }
+
+    function renderFilterChips(){
+      const el = document.getElementById('rankingFilterChips');
+      if(!el) return;
+      const chips = [];
+      if(!(currentHubs.has('All') || currentHubs.size === 0)){
+        [...currentHubs].filter(h=>h!=='All').forEach(h=>{
+          chips.push(`<button type="button" class="chip" data-act="hub" data-val="${escapeHtml(h)}">${escapeHtml(h)} <span>×</span></button>`);
+        });
+      }
+      if(currentVehicleGroups.size === 0 || currentVehicleGroups.has('all')){
+        // all vehicles selected
+      } else {
+        [...currentVehicleGroups].filter(g=>g!=='all').forEach(g=>{
+          chips.push(`<button type="button" class="chip" data-act="group" data-val="${escapeHtml(g)}">${escapeHtml(vehicleGroupLabel(g))} <span>×</span></button>`);
+        });
+      }
+      el.innerHTML = chips.join('');
+      el.querySelectorAll('.chip').forEach(btn=>{
+        btn.addEventListener('click',()=>{
+          const act = btn.dataset.act, val = btn.dataset.val;
+          if(act === 'group'){
+            currentVehicleGroups.delete(val);
+            if(currentVehicleGroups.size === 0) currentVehicleGroups.add('all');
+          } else { currentHubs.delete(val); if(currentHubs.size === 0) currentHubs.add('All'); }
+          buildHubDropdown((__perms && __perms.hubs && __perms.hubs.length) ? __perms.hubs : HUB_FALLBACK);
+          renderVehicleSeg();
+          document.getElementById('rankingHubValue').textContent = (currentHubs.has('All') || currentHubs.size===0) ? 'All Hubs' : ([...currentHubs].filter(h=>h!=='All').length > 3 ? [...currentHubs].filter(h=>h!=='All').length + ' hubs' : [...currentHubs].filter(h=>h!=='All').join(', '));
+          renderFilterChips();
+          renderStats(); renderRows();
+          renderTop10();
+        });
+      });
+    }
+
+    function renderTop10(){
+      if(!top10WrapEl) return;
+      const rows = applySorting(getFilteredRows());
+      const high = rows.slice(0, 10);
+      const low = rows.slice().reverse().slice(0, 10);
+      const build = (list, kind) => {
+        if(!list.length) return `<div class="top10-empty">No riders</div>`;
+        return `<ul class="top10-list">${list.map((r, i)=>`
+          <li class="top10-item">
+            <span class="top10-rank" style="background:${successColor(r.deliverySuccessRate||0)};color:#fff;box-shadow:0 0 10px ${successColor(r.deliverySuccessRate||0)}">${i+1}</span>
+            <div class="top10-info">
+              <div class="top10-info-name">${escapeHtml(r.name)}</div>
+              <div class="top10-info-meta"><span>${escapeHtml(r.id||'')}</span> · <span>${escapeHtml(r.hub||'N/A')}</span> · <span>${escapeHtml(r.vehicleType||'N/A')}</span></div>
+            </div>
+            <div class="top10-val" style="color:${successColor(r.deliverySuccessRate||0)}">${fmtPct(r.deliverySuccessRate||0)}</div>
+          </li>
+        `).join('')}</ul>`;
+      };
+      top10WrapEl.innerHTML = `
+        <div class="top10-panel">
+          <div class="top10-head">
+            <h3>Top 10 Highest</h3>
+            <span class="tag">Delivery Success</span>
+          </div>
+          ${build(high, 'high')}
+        </div>
+        <div class="top10-panel">
+          <div class="top10-head">
+            <h3>Top 10 Lowest</h3>
+            <span class="tag">Delivery Success</span>
+          </div>
+          ${build(low, 'low')}
+        </div>
+      `;
     }
 
     async function loadData() {
@@ -274,6 +447,9 @@
         allRows = allData.filter(r => r.daysWorking > 0 && r.deliverySuccessRate > 0);
         console.log('Filtered rows:', allRows);
         debugLogSample();
+        renderVehicleSeg();
+        renderFilterChips();
+        renderTop10();
         renderStats();
         renderRows();
         statusEl.textContent = `Loaded ${allRows.length} active rider records from ${hubs.length} hubs`;
@@ -287,9 +463,12 @@
 
     function getFilteredRows() {
       let rows = allRows;
-      if (currentHub !== 'All') {
-        const target = normalizeHubName(currentHub);
-        rows = rows.filter(r => normalizeHubName(r.hub) === target);
+      if (!(currentHubs.has('All') || currentHubs.size === 0)) {
+        const targets = new Set([...currentHubs].map(normalizeHubName));
+        rows = rows.filter(r => targets.has(normalizeHubName(r.hub)));
+      }
+      if (!(currentVehicleGroups.has('all') || currentVehicleGroups.size === 0)) {
+        rows = rows.filter(r => currentVehicleGroups.has(vehicleGroupKey(r.vehicleType)));
       }
       if (search) {
         const q = search.toLowerCase();
@@ -345,11 +524,11 @@
       `).join('');
     }
 
-    function getRankClass(rank) {
-      if (rank === 1) return 'rank-1';
-      if (rank === 2) return 'rank-2';
-      if (rank === 3) return 'rank-3';
-      return 'rank-other';
+    function rankColor(rank){
+      const n = Math.max(1, Number(rank||1));
+      const t = Math.min(1, (n - 1) / 19);
+      const h = Math.round(140 * (1 - t));
+      return `hsl(${h}, 85%, 42%)`;
     }
 
     function renderRows() {
@@ -369,28 +548,43 @@
         _isBottom: idx >= rows.length - 5
       }));
 
-      rowsEl.innerHTML = rowsWithRank.map(r => {
-        const rankClass = getRankClass(r._rank);
+      const scrollPos = tableCardEl ? tableCardEl.scrollTop : 0;
+
+      const html = rowsWithRank.map(r => {
+        const rankStyle = `background:${rankColor(r._rank)};color:#fff;box-shadow:0 0 12px ${rankColor(r._rank)}`;
         const perfClass = r._isTop ? 'perf-top' : (r._isBottom ? 'perf-bottom' : '');
         const perfLabel = r._isTop ? 'Top' : (r._isBottom ? 'Bottom' : '');
         return `
           <tr>
-            <td><span class="rank-badge ${rankClass}">${r._rank}</span></td>
+            <td><span class="rank-badge" style="${rankStyle}">${r._rank}</span></td>
             <td style="font-weight:600;">${escapeHtml(r.name)}</td>
             <td><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;background:var(--hover);padding:1px 6px;border-radius:4px;">${escapeHtml(r.id)}</span></td>
             <td><span style="background:rgba(238,77,45,.12);color:var(--amber-deep);padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;">${escapeHtml(r.hub || 'N/A')}</span></td>
             <td>${escapeHtml(r.vehicleType || 'N/A')}</td>
             <td class="num">${fmtNum(r.daysWorking)}</td>
             <td class="num">${(r.avgParcelsPerDay||0).toFixed(1)}</td>
-            <td class="num ${r.deliverySuccessRate >= 90 ? 'rate-green' : (r.deliverySuccessRate >= 80 ? 'rate-yellow' : (r.deliverySuccessRate >= 70 ? 'rate-orange' : (r.deliverySuccessRate >= 60 ? 'rate-bright-red' : 'rate-dark-red')))}">${fmtPct(r.deliverySuccessRate)}</td>
+            <td class="num rate-num" style="color:${successColor(r.deliverySuccessRate)}">${fmtPct(r.deliverySuccessRate)}</td>
             <td class="num">${fmtPct(r.attendanceRate)}</td>
             <td class="num">${fmtNum(r.parcelsDelivered)}</td>
           </tr>
         `;
       }).join('');
+      rowsEl.innerHTML = html;
+      if (tableCardEl) {
+        tableCardEl.scrollTop = scrollPos;
+        requestAnimationFrame(() => { tableCardEl.scrollTop = scrollPos; });
+      }
     }
 
     function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&','<':'<','>':'>','"':'"',"'":"'"}[c])); }
+
+    function successColor(rate){
+      const r = Math.max(0, Math.min(100, Number(rate||0)))/100;
+      const a = Math.round(255*(1-r) + 0*r);
+      const b = Math.round(107*(1-r) + 200*r);
+      const c = Math.round(107*(1-r) + 120*r);
+      return `rgb(${a},${b},${c})`;
+    }
 
     // Table header sorting
     const sortableHeaders = document.querySelectorAll('th');
@@ -416,15 +610,29 @@
       });
     });
 
+    function wireRankingHubDropdown(){
+      const trigger=document.getElementById('rankingHubTrigger');
+      const menu=document.getElementById('rankingHubMenu');
+      if(!trigger||!menu) return;
+      trigger.addEventListener('click', e=>{
+        e.stopPropagation();
+        if(menu.classList.contains('open')) closeRankingHubDropdown();
+        else openRankingHubDropdown();
+      });
+      document.addEventListener('click', e=>{
+        if(menu.contains(e.target)) return;
+        closeRankingHubDropdown();
+      });
+    }
+
     if (typeof window.applySavedTheme === 'function') window.applySavedTheme();
 
-    searchEl.addEventListener('input', e => { search = e.target.value; renderRows(); });
+    searchEl.addEventListener('input', e => { search = e.target.value; renderRows(); renderTop10(); });
 
     (async function start(){
       try {
         const hubs = await window.Auth.getHubs();
-        buildHubDropdown(hubs);
-        applyHubFilter();
+        applyHubFilter(hubs);
         await loadData();
       } catch (err) {
         console.error('Ranking page failed to start:', err);
@@ -438,8 +646,7 @@
       if (window.Auth && typeof window.Auth.onHubsChange === 'function') {
         try {
           window.Auth.onHubsChange(newHubs => {
-            buildHubDropdown(newHubs);
-            applyHubFilter();
+            applyHubFilter(newHubs);
             loadData().catch(() => {});
           });
         } catch (e) { /* ignore */ }

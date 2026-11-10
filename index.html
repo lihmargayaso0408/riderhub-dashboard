@@ -162,12 +162,6 @@
       </span>
       <span class="drawer-label">Hub Location</span>
     </button>
-    <button class="drawer-item" id="openNewHubBtn" type="button" style="display:none;">
-      <span class="drawer-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-      </span>
-      <span class="drawer-label">New Hub</span>
-    </button>
     <button class="drawer-item" id="logoutBtn" type="button">
       <span class="drawer-icon" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
@@ -319,23 +313,6 @@
       <div id="accessList" class="access-list"></div>
       <div class="modal-actions">
         <button class="btn-ghost" id="closeAccess">Close</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- New Hub modal (admin) -->
-  <div class="overlay" id="newHubOverlay">
-    <div class="modal">
-      <h3>New Hub</h3>
-      <p class="hint">Add a hub to the shared registry. It will appear on every rider-related page once an admin grants it to their account via Manage Accounts.</p>
-      <div class="field">
-        <label for="newHubNameInput">Hub name</label>
-        <input type="text" id="newHubNameInput" placeholder="e.g. Tinoc" autocomplete="off">
-      </div>
-      <div class="modal-msg" id="newHubModalMsg"></div>
-      <div class="modal-actions">
-        <button class="btn-ghost" id="cancelNewHub">Cancel</button>
-        <button class="btn-primary" id="saveNewHub" disabled>Save</button>
       </div>
     </div>
   </div>

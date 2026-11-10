@@ -450,9 +450,6 @@ function fmtWeekLabel(d){
       wireStaticEvents();
       if(perms.role === 'admin') refreshAccessBadge();
       startAutoRefresh();
-
-      // Wire the New Hub modal (admin-only).
-      wireNewHubModal(perms);
     } catch(err) {
       console.error('Dashboard init failed:', err);
       $('#content').innerHTML = '<div class="empty"><h3>Failed to load dashboard</h3><p>' + (err && err.message ? err.message : 'Unknown error') + '</p><p>Check the browser console (F12) for details.</p></div>';
@@ -672,7 +669,7 @@ function allowedHubs(){
       if(b) b.style.display = pages.indexOf(key) === -1 ? 'none' : '';
     });
 
-    // Admin-only: Access Requests + Manage Accounts + New Hub entries.
+    // Admin-only: Access Requests + Manage Accounts entries.
     if(perms.role==='admin'){
       const ab = $('#openAccessBtn'); if(ab) ab.style.display='';
       setupAccessRequests();
@@ -685,11 +682,6 @@ function allowedHubs(){
       if(hl){
         hl.style.display='';
         hl.addEventListener('click', ()=>{ closeSettingsMenu(); window.location.href='hub-location.html'; });
-      }
-      const nh = $('#openNewHubBtn');
-      if(nh){
-        nh.style.display='';
-        nh.addEventListener('click', ()=>{ closeSettingsMenu(); openNewHubModal(); });
       }
     }
   }
@@ -779,74 +771,6 @@ function allowedHubs(){
     });
     $('#closeAccess').addEventListener('click', ()=> overlay.classList.remove('show'));
     overlay.addEventListener('click', e=>{ if(e.target.id==='accessOverlay') overlay.classList.remove('show'); });
-  }
-
-  // ---- New Hub modal (admin-only) ----
-  function openNewHubModal(){
-    const overlay = $('#newHubOverlay');
-    const input = $('#newHubNameInput');
-    const msg = $('#newHubModalMsg');
-    const saveBtn = $('#saveNewHub');
-    if(!overlay) return;
-    input.value = '';
-    msg.textContent = '';
-    msg.className = 'modal-msg';
-    saveBtn.disabled = true;
-    overlay.classList.add('show');
-    setTimeout(()=>input.focus(), 50);
-  }
-  function closeNewHubModal(){
-    $('#newHubOverlay').classList.remove('show');
-  }
-  function wireNewHubModal(perms){
-    const overlay = $('#newHubOverlay');
-    const input = $('#newHubNameInput');
-    const msg = $('#newHubModalMsg');
-    const saveBtn = $('#saveNewHub');
-    if(!overlay) return;
-
-    const validate = ()=>{
-      const v = (input.value || '').trim();
-      const existing = currentHubs();
-      let ok = v.length > 0;
-      let err = '';
-      if(!ok) err = 'Enter a hub name.';
-      else if (existing.some(h => h.toLowerCase() === v.toLowerCase())) err = 'A hub named "' + v + '" already exists.';
-      msg.textContent = err;
-      msg.className = err ? 'modal-msg err' : 'modal-msg';
-      saveBtn.disabled = !ok || !!err;
-    };
-    input.addEventListener('input', validate);
-
-    $('#cancelNewHub').addEventListener('click', closeNewHubModal);
-    overlay.addEventListener('click', e=>{ if(e.target.id==='newHubOverlay') closeNewHubModal(); });
-
-    saveBtn.addEventListener('click', async ()=>{
-      const name = (input.value || '').trim();
-      if(!name) return;
-      saveBtn.disabled = true;
-      saveBtn.textContent = 'Saving…';
-      msg.textContent = '';
-      try {
-        if (window.Auth && typeof window.Auth.addHub === 'function') {
-          await window.Auth.addHub(name);
-        } else {
-          throw new Error('Auth.addHub is not available.');
-        }
-        // Refresh the hub list and rebuild UI.
-        await loadHubs();
-        populateHubSelects();
-        applyAccessControl(state.perms);
-        closeNewHubModal();
-        showToast('Added hub <b>' + escapeHtml(name) + '</b>. Grant it to accounts via Manage Accounts.');
-      } catch(e) {
-        msg.textContent = 'Could not add hub: ' + (e && e.message ? e.message : 'unknown error');
-        msg.className = 'modal-msg err';
-      } finally {
-        saveBtn.disabled = false;
-        saveBtn.textContent = 'Save';
-      }
-    });
   }
 
   // Repopulate the upload/download hub <select> elements from the dynamic list.
