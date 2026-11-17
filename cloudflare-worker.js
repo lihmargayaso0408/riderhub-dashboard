@@ -105,7 +105,16 @@ export default {
         if (!profile) {
           return new Response(JSON.stringify({ ok: true, message: 'If an account exists, a reset link has been sent.' }), { headers });
         }
-        return new Response(JSON.stringify({ ok: true, message: 'If an account exists, a reset link has been sent.' }), { headers });
+        // Generate a new random password, hash it, and store it so the user
+        // (or an admin) can log in again. The plaintext password is returned
+        // once; it is not stored anywhere.
+        const newPassword = Array.from(crypto.getRandomValues(new Uint8Array(6)))
+          .map(b => 'abcdefghijklmnopqrstuvwxyz0123456789'[b % 36]).join('');
+        const newHash = await hashPassword(newPassword, env.SESSION_SECRET || '');
+        profile.passwordHash = newHash;
+        profile.updatedAt = new Date().toISOString();
+        await writeJson(env.ACCOUNTS, `users/${uid}`, profile);
+        return new Response(JSON.stringify({ ok: true, password: newPassword }), { headers });
       }
 
       // ---- DATA: GET /api/data/:key ----

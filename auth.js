@@ -133,7 +133,8 @@ async function logout() {
 
 async function sendPasswordReset(email) {
   if (!email) throw new Error('Email is required.');
-  await workerRequest('POST', '/api/auth/password-reset', { email });
+  const res = await workerRequest('POST', '/api/auth/password-reset', { email });
+  return res;
 }
 
 function mergeHubs(names) {

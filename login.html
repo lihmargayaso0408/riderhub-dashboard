@@ -78,7 +78,7 @@
     </div>
 
     <div class="login-foot">
-      <a href="index.html">Back to dashboard</a>
+      <a href="index.html">Back to dashboard</a> · <a href="#" id="forgotLink">Forgot password?</a>
     </div>
   </div>
 
@@ -154,6 +154,28 @@
         signInBtn.disabled = false; requestBtn.disabled = false;
       }
     });
+
+    const forgotLink = document.getElementById('forgotLink');
+    if (forgotLink) {
+      forgotLink.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const email = emailEl.value.trim();
+        if (!email) { setMsg('Enter your email first, then click "Forgot password?"', 'err'); return; }
+        forgotLink.style.opacity = '0.5';
+        try {
+          const res = await Auth.sendPasswordReset(email);
+          if (res && res.password) {
+            setMsg('New password: ' + res.password + ' — use it to sign in, then change it after.', 'ok');
+          } else {
+            setMsg('If an account exists, a new password has been generated. Check the console (F12) for details.', 'info');
+          }
+        } catch (e) {
+          setMsg(e.message || 'Could not reset password.', 'err');
+        } finally {
+          forgotLink.style.opacity = '1';
+        }
+      });
+    }
   </script>
 </body>
 </html>
