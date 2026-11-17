@@ -143,7 +143,7 @@
         <div class="account-head">
           <div>
             <div class="account-email">${escapeHtml(acc.email || acc.id)}</div>
-            ${acc.name ? `<div class="account-name">${escapeHtml(acc.name)}</div>` : ''}
+            <div class="account-name">${escapeHtml(acc.name || acc.email || acc.id)}</div>
           </div>
           <div class="account-meta">
             <span class="role-chip ${isAdminAcct ? 'role-admin' : 'role-user'}">${isAdminAcct ? 'Admin' : 'User'}</span>

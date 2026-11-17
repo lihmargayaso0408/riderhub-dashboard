@@ -251,7 +251,7 @@ const Auth = {
     }
   },
   async removeAccess(uid) {
-    await patchProfile(uid, { status: 'rejected', updatedAt: nowISO() });
+    await workerRequest('DELETE', '/api/users/' + encodeURIComponent(uid));
   },
   async getHubs() {
     if (Auth._hubsCache && Date.now() - Auth._hubsCachedAt < 30000) return Auth._hubsCache;

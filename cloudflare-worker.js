@@ -141,14 +141,14 @@ export default {
       // ---- USERS: GET /api/users/:uid ----
       const userMatch = path.match(/^\/api\/users\/(.+)$/);
       if (userMatch && request.method === 'GET') {
-        const uid = userMatch[1];
+        const uid = decodeURIComponent(userMatch[1]);
         const value = await readJson(env.ACCOUNTS, `users/${uid}`);
         return new Response(JSON.stringify(value), { headers });
       }
 
       // ---- USERS: POST /api/users/:uid ----
       if (userMatch && request.method === 'POST') {
-        const uid = userMatch[1];
+        const uid = decodeURIComponent(userMatch[1]);
         const body = await request.json();
         await writeJson(env.ACCOUNTS, `users/${uid}`, body);
         return new Response(JSON.stringify({ ok: true }), { headers });
@@ -156,11 +156,18 @@ export default {
 
       // ---- USERS: PATCH /api/users/:uid ----
       if (userMatch && request.method === 'PATCH') {
-        const uid = userMatch[1];
+        const uid = decodeURIComponent(userMatch[1]);
         const existing = await readJson(env.ACCOUNTS, `users/${uid}`) || {};
         const patch = await request.json();
         const merged = Object.assign({}, existing, patch);
         await writeJson(env.ACCOUNTS, `users/${uid}`, merged);
+        return new Response(JSON.stringify({ ok: true }), { headers });
+      }
+
+      // ---- USERS: DELETE /api/users/:uid ----
+      if (userMatch && request.method === 'DELETE') {
+        const uid = decodeURIComponent(userMatch[1]);
+        await env.ACCOUNTS.delete(`users/${uid}`);
         return new Response(JSON.stringify({ ok: true }), { headers });
       }
 
