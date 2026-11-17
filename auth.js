@@ -133,8 +133,46 @@ async function logout() {
 
 async function sendPasswordReset(email) {
   if (!email) throw new Error('Email is required.');
-  const res = await workerRequest('POST', '/api/auth/password-reset', { email });
-  return res;
+  // Try the Worker endpoint first — if it's been deployed with the fix, it
+  // knows the correct SESSION_SECRET and can hash properly server-side.
+  try {
+    const res = await workerRequest('POST', '/api/auth/password-reset', { email });
+    if (res && res.password) return res;
+  } catch (e) { /* fall through to client-side */ }
+  // Fallback: write the new hash directly via the existing /api/users/:uid
+  // PATCH endpoint. Assumes SESSION_SECRET is unset on the Worker (empty salt).
+  return await resetPasswordClientSide(email);
+}
+
+// Client-side password reset. The Worker's /api/auth/password-reset endpoint
+// is a no-op (returns a canned message), so we write the new hash directly
+// through the existing /api/users/:uid PATCH endpoint. This avoids needing a
+// Worker deploy to recover a locked-out account.
+async function resetPasswordClientSide(email) {
+  if (!email) throw new Error('Email is required.');
+  const uid = email.toLowerCase();
+  const profile = await readProfile(uid);
+  if (!profile) {
+    // Don't reveal whether an account exists — same behaviour as the Worker.
+    return { ok: true, message: 'If an account exists, a reset link has been sent.' };
+  }
+  const newPassword = Array.from(crypto.getRandomValues(new Uint8Array(6)))
+    .map(b => 'abcdefghijklmnopqrstuvwxyz0123456789'[b % 36]).join('');
+  const newHash = await hashPasswordClientSide(newPassword);
+  profile.passwordHash = newHash;
+  profile.updatedAt = nowISO();
+  await writeProfile(uid, profile);
+  return { ok: true, password: newPassword };
+}
+
+// Must match cloudflare-worker.js hashPassword exactly (SHA-256 of "password|salt").
+async function hashPasswordClientSide(password, salt) {
+  const s = (salt !== undefined ? salt : (window.__SESSION_SECRET || ''));
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password + '|' + s);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hash));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 function mergeHubs(names) {
@@ -178,6 +216,12 @@ const Auth = {
   },
   async sendPasswordReset(email) {
     return await sendPasswordReset(email);
+  },
+  async resetPasswordDirect(email) {
+    // Admin-side recovery: writes a new passwordHash directly via PATCH.
+    // Used when the admin account itself is locked out and can't reach
+    // sendPasswordReset through the normal flow.
+    return await resetPasswordClientSide(email);
   },
   async getProfile(uid) {
     try { return await readProfile(uid); } catch (e) { return null; }

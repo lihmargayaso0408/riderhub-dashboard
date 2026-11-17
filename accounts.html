@@ -205,17 +205,23 @@ msgEl.textContent = 'Saved.';
         if (resetBtn) {
           resetBtn.addEventListener('click', async () => {
             const email = card.querySelector('.account-email').textContent;
-            if (!confirm(`Send password reset email to ${email}?`)) return;
+            if (!confirm(`Reset password for ${email}? A new password will be generated and shown here.`)) return;
             resetBtn.disabled = true;
-            msgEl.textContent = 'Sending…';
+            msgEl.textContent = 'Generating…';
             msgEl.className = 'account-msg';
             try {
-              await Auth.sendPasswordReset(email);
-              msgEl.textContent = 'Reset email sent.';
-              msgEl.className = 'account-msg ok';
-              showToast('Password reset email sent.');
+              const res = await Auth.sendPasswordReset(email);
+              if (res && res.password) {
+                msgEl.textContent = 'New password: ' + res.password;
+                msgEl.className = 'account-msg ok';
+                showToast('Password reset for ' + email + ' — new password: ' + res.password);
+              } else {
+                msgEl.textContent = 'Reset complete.';
+                msgEl.className = 'account-msg ok';
+                showToast('Password reset email sent.');
+              }
             } catch (e) {
-              msgEl.textContent = 'Could not send: ' + (e.message || 'error');
+              msgEl.textContent = 'Could not reset: ' + (e.message || 'error');
               msgEl.className = 'account-msg err';
               resetBtn.disabled = false;
             }
