@@ -707,7 +707,7 @@ function allowedHubs(){
             <span class="access-meta">${created?('Requested '+created):''}</span>
           </div>
           <div class="access-opts">
-            <div class="access-group"><div class="access-group-title">Hubs</div>${hubs}</div>
+            <div class="access-group"><div class="access-group-title">Hubs</div><button type="button" class="btn-ghost select-all-hubs" data-uid="${p.uid}" style="font-size:11px;padding:2px 8px;margin-bottom:4px;align-self:flex-start;">Select All</button>${hubs}</div>
             <div class="access-group"><div class="access-group-title">Actions</div>${acts}</div>
             <div class="access-group"><div class="access-group-title">Pages</div>${pages}</div>
           </div>
@@ -717,6 +717,17 @@ function allowedHubs(){
           </div>
         </div>`;
       }).join('');
+
+      listEl.querySelectorAll('.select-all-hubs').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const uid = btn.dataset.uid;
+          const row = listEl.querySelector(`.access-row[data-uid="${uid}"]`);
+          const checkboxes = row.querySelectorAll('input[data-type="hub"]');
+          const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+          checkboxes.forEach(cb => { cb.checked = !allChecked; });
+          btn.textContent = allChecked ? 'Select All' : 'Deselect All';
+        });
+      });
 
       listEl.querySelectorAll('button[data-act]').forEach(btn=>{
         btn.addEventListener('click', async ()=>{
