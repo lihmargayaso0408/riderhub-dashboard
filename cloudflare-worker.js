@@ -175,7 +175,16 @@ export default {
       if (path === '/api/users' && request.method === 'GET') {
         const status = url.searchParams.get('status');
         const all = await listJson(env.ACCOUNTS, 'users/');
-        let result = all;
+        // Deduplicate by lowercased email, keeping the latest updatedAt
+        const byEmail = new Map();
+        for (const u of all) {
+          const key = (u.email || '').toLowerCase();
+          const existing = byEmail.get(key);
+          if (!existing || (u.updatedAt || '') > (existing.updatedAt || '')) {
+            byEmail.set(key, u);
+          }
+        }
+        let result = Array.from(byEmail.values());
         if (status) {
           result = result.filter(u => u.status === status);
         }

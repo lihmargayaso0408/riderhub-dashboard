@@ -134,6 +134,7 @@
         if (profile) location.href = 'index.html';
       } catch (e) {
         setMsg(e.message || 'Sign in failed.', 'err');
+      } finally {
         signInBtn.disabled = false; requestBtn.disabled = false;
       }
     });

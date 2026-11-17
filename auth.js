@@ -91,21 +91,11 @@ async function ensureProfileFromLogin(user) {
   const isAdmin = ADMIN_EMAILS.includes(email);
   let profile = null;
   try { profile = await readProfile(user.uid); } catch (e) { console.warn('ensureProfile read failed', e); }
+  // If the read failed, trust the user object returned by the login endpoint
+  // (it already carries the correct status/role from R2). Creating a new
+  // profile here would overwrite an existing approved account with 'pending'.
   if (!profile) {
-    const data = {
-      uid: user.uid,
-      email: user.email || '',
-      name: user.displayName || user.email || '',
-      status: isAdmin ? 'approved' : 'pending',
-      role: isAdmin ? 'admin' : 'user',
-      hubs: isAdmin ? ALL_HUBS.slice() : [],
-      actions: isAdmin ? fullActions() : emptyActions(),
-      pages: isAdmin ? fullPages() : fullPages(),
-      createdAt: nowISO(),
-      updatedAt: nowISO()
-    };
-    try { await writeProfile(user.uid, data); } catch (e) { console.warn('ensureProfile create failed', e); }
-    return data;
+    return user;
   }
   if (isAdmin && profile.role !== 'admin') {
     const patch = {
