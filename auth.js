@@ -91,11 +91,21 @@ async function ensureProfileFromLogin(user) {
   const isAdmin = ADMIN_EMAILS.includes(email);
   let profile = null;
   try { profile = await readProfile(user.uid); } catch (e) { console.warn('ensureProfile read failed', e); }
-  // If the read failed, trust the user object returned by the login endpoint
-  // (it already carries the correct status/role from R2). Creating a new
-  // profile here would overwrite an existing approved account with 'pending'.
   if (!profile) {
-    return user;
+    const data = {
+      uid: user.uid,
+      email: user.email || '',
+      name: user.displayName || user.email || '',
+      status: isAdmin ? 'approved' : 'pending',
+      role: isAdmin ? 'admin' : 'user',
+      hubs: isAdmin ? ALL_HUBS.slice() : [],
+      actions: isAdmin ? fullActions() : emptyActions(),
+      pages: isAdmin ? fullPages() : fullPages(),
+      createdAt: nowISO(),
+      updatedAt: nowISO()
+    };
+    try { await writeProfile(user.uid, data); } catch (e) { console.warn('ensureProfile create failed', e); }
+    return data;
   }
   if (isAdmin && profile.role !== 'admin') {
     const patch = {
@@ -133,39 +143,58 @@ async function logout() {
 
 async function sendPasswordReset(email) {
   if (!email) throw new Error('Email is required.');
-  // Try the Worker endpoint first — if it's been deployed with the fix, it
-  // knows the correct SESSION_SECRET and can hash properly server-side.
-  try {
-    const res = await workerRequest('POST', '/api/auth/password-reset', { email });
-    if (res && res.password) return res;
-  } catch (e) { /* fall through to client-side */ }
-  // Fallback: write the new hash directly via the existing /api/users/:uid
-  // PATCH endpoint. Assumes SESSION_SECRET is unset on the Worker (empty salt).
-  return await resetPasswordClientSide(email);
+  const res = await workerRequest('POST', '/api/auth/password-reset', { email });
+  if (!res || !res.ok) throw new Error(res && res.error ? res.error : 'Password reset failed.');
+  if (res.password) return { ok: true, password: res.password };
+  return { ok: true };
 }
 
-// Client-side password reset. The Worker's /api/auth/password-reset endpoint
-// is a no-op (returns a canned message), so we write the new hash directly
-// through the existing /api/users/:uid PATCH endpoint. This avoids needing a
-// Worker deploy to recover a locked-out account.
-async function resetPasswordClientSide(email) {
+// Client-side password reset. Writes a new passwordHash directly via the
+// existing /api/users/:uid PATCH endpoint (merge — safe, never drops fields).
+// If the profile is missing or unreadable, creates a minimal one so the
+// user can at least log in and an admin can fix permissions afterwards.
+async function resetPasswordClientSide(email, newPassword) {
   if (!email) throw new Error('Email is required.');
+  if (!newPassword) throw new Error('Password is required.');
   const uid = email.toLowerCase();
-  const profile = await readProfile(uid);
-  if (!profile) {
-    // Don't reveal whether an account exists — same behaviour as the Worker.
-    return { ok: true, message: 'If an account exists, a reset link has been sent.' };
-  }
-  const newPassword = Array.from(crypto.getRandomValues(new Uint8Array(6)))
-    .map(b => 'abcdefghijklmnopqrstuvwxyz0123456789'[b % 36]).join('');
+  let profile = null;
+  try { profile = await readProfile(uid); } catch (e) { console.warn('reset: read failed', e); }
+
   const newHash = await hashPasswordClientSide(newPassword);
-  profile.passwordHash = newHash;
-  profile.updatedAt = nowISO();
-  await writeProfile(uid, profile);
+
+  if (profile) {
+    // Merge: only update passwordHash + updatedAt, leave everything else intact.
+    await patchProfile(uid, { passwordHash: newHash, updatedAt: nowISO() });
+  } else {
+    // Profile missing — create a minimal one so login at least works.
+    const minimal = {
+      uid,
+      email: email.toLowerCase(),
+      name: email,
+      status: 'pending',
+      role: 'user',
+      hubs: [],
+      actions: {},
+      pages: [],
+      passwordHash: newHash,
+      createdAt: nowISO(),
+      updatedAt: nowISO()
+    };
+    await writeProfile(uid, minimal);
+  }
   return { ok: true, password: newPassword };
 }
 
+async function listAllUsersForRecovery() {
+  const approved = await listUsers('approved');
+  const pending = await listUsers('pending');
+  return approved.concat(pending).filter(u => u && u.email);
+}
+
 // Must match cloudflare-worker.js hashPassword exactly (SHA-256 of "password|salt").
+// The Worker uses env.SESSION_SECRET || '' — configure SESSION_SECRET in wrangler.toml
+// and cloudflare-config.js to match. If they differ, password reset will create
+// hashes that the Worker cannot verify.
 async function hashPasswordClientSide(password, salt) {
   const s = (salt !== undefined ? salt : (window.__SESSION_SECRET || ''));
   const encoder = new TextEncoder();
@@ -217,11 +246,14 @@ const Auth = {
   async sendPasswordReset(email) {
     return await sendPasswordReset(email);
   },
-  async resetPasswordDirect(email) {
+  async resetPasswordDirect(email, newPassword) {
     // Admin-side recovery: writes a new passwordHash directly via PATCH.
-    // Used when the admin account itself is locked out and can't reach
-    // sendPasswordReset through the normal flow.
-    return await resetPasswordClientSide(email);
+    return await resetPasswordClientSide(email, newPassword);
+  },
+  async listAllUsersForRecovery() {
+    const approved = await listUsers('approved');
+    const pending = await listUsers('pending');
+    return approved.concat(pending).filter(u => u && u.email);
   },
   async getProfile(uid) {
     try { return await readProfile(uid); } catch (e) { return null; }

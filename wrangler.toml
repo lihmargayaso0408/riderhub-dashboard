@@ -2,6 +2,9 @@
 main = "cloudflare-worker.js"
 compatibility_date = "2024-10-01"
 
+[vars]
+SESSION_SECRET = ""
+
 [[r2_buckets]]
 binding = "ACCOUNTS"
 bucket_name = "accounts"
