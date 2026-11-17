@@ -1,6 +1,6 @@
 // auth.js — shared authentication + per-user access control.
-// Backed by the Cloudflare Worker API (no Firebase).
-// Loaded as a module on every page (after cloudflare-config.js + cloudflare-api.js).
+// Backed by localStorage (no Cloudflare Worker).
+// Loaded as a module on every page.
 
 const ALL_HUBS = ['Abra-Bucay', 'Bacarra', 'Badoc', 'Bangued', 'Bangui', 'Bantay', 'Bauko', 'Buguias', 'Candon', 'Dolores-Abra', 'Ilocos Sur', 'Ilocos Sur-Santa Lucia', 'Ilocos Sur-Santa Maria', 'Irisan', 'Itogon', 'Itogon Tuding', 'Kapangan', 'La Paz Abra', 'La Trinidad Pico', 'Laoag', 'MB Atok', 'Narvacan', 'North Laoag', 'San Nicolas', 'Santo Domingo', 'Tagudin'];
 const REMOVED_HUBS = ['MB Mankayan'];
@@ -23,55 +23,76 @@ function emptyActions() { return Object.fromEntries(ALL_ACTIONS.map(a => [a, fal
 function fullActions() { return Object.fromEntries(ALL_ACTIONS.map(a => [a, true])); }
 function fullPages() { return ALL_PAGES.map(p => p.key); }
 
-function workerBase() {
-  return window.CLOUDFLARE_WORKER_URL || '';
-}
-function workerEnabled() {
-  return !!workerBase();
-}
-
-async function workerRequest(method, path, body) {
-  if (!workerEnabled()) throw new Error('Cloudflare Worker URL not configured.');
-  const init = { method, headers: { 'Content-Type': 'application/json' } };
-  if (body !== undefined) init.body = JSON.stringify(body);
-  const res = await fetch(workerBase() + path, init);
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error('Worker request failed: ' + res.status + ' ' + text);
-  }
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
-}
-
-async function readProfile(uid) {
-  const data = await workerRequest('GET', '/api/users/' + encodeURIComponent(uid));
-  return data || null;
-}
-async function writeProfile(uid, data) {
-  await workerRequest('POST', '/api/users/' + encodeURIComponent(uid), data);
-  return data;
-}
-async function patchProfile(uid, patch) {
-  await workerRequest('PATCH', '/api/users/' + encodeURIComponent(uid), patch);
-  return patch;
-}
-async function listUsers(status) {
-  const result = await workerRequest('GET', '/api/users?status=' + encodeURIComponent(status));
-  return (result && result.users) || [];
-}
-async function readHubsList() {
-  const value = await workerRequest('GET', '/api/hubs');
-  return Array.isArray(value) ? value : (value && value.hubs) || [];
-}
-async function addHubRemote(name) {
-  await workerRequest('POST', '/api/hubs', { name });
-}
-
 function nowISO() { return new Date().toISOString(); }
 
 const SESSION_KEY = 'spx-auth-user';
+const USER_PREFIX = 'spx-user-';
+const HUBS_KEY = 'spx-hubs';
 
-// Persist the signed-in user so the app survives refreshes without Firebase Auth.
+function userKey(uid) { return USER_PREFIX + uid; }
+
+// ---- Password hashing (SHA-256 with salt, same as worker) ----
+async function hashPassword(password, salt) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password + '|' + salt);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hash));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function verifyPassword(password, storedHash, salt) {
+  const computed = await hashPassword(password, salt);
+  return computed === storedHash;
+}
+
+// ---- localStorage profile storage ----
+function readProfile(uid) {
+  try {
+    const raw = localStorage.getItem(userKey(uid));
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+function writeProfile(uid, data) {
+  try { localStorage.setItem(userKey(uid), JSON.stringify(data)); } catch (e) { /* ignore quota errors */ }
+  return data;
+}
+async function patchProfile(uid, patch) {
+  const profile = readProfile(uid) || {};
+  const merged = Object.assign({}, profile, patch, { updatedAt: nowISO() });
+  writeProfile(uid, merged);
+  return merged;
+}
+function listUsers(status) {
+  const users = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key || !key.startsWith(USER_PREFIX)) continue;
+    try {
+      const u = JSON.parse(localStorage.getItem(key));
+      if (u && (!status || u.status === status)) users.push(u);
+    } catch (e) {}
+  }
+  return users;
+}
+
+// ---- Hubs (localStorage) ----
+function readHubsList() {
+  try {
+    const raw = localStorage.getItem(HUBS_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+function writeHubsList(names) {
+  try { localStorage.setItem(HUBS_KEY, JSON.stringify(names)); } catch (e) { /* ignore */ }
+}
+async function addHubRemote(name) {
+  const existing = readHubsList() || [];
+  if (!existing.some(h => h.toLowerCase() === String(name).toLowerCase())) {
+    existing.push(name);
+    writeHubsList(existing);
+  }
+}
+
+// ---- Session ----
 function sessionGet() {
   try {
     const raw = localStorage.getItem(SESSION_KEY);
@@ -85,12 +106,12 @@ function sessionClear() {
   try { localStorage.removeItem(SESSION_KEY); } catch (e) { /* ignore */ }
 }
 
-// ---- Auth over Cloudflare Worker ----
+// ---- Auth over localStorage ----
 async function ensureProfileFromLogin(user) {
   const email = (user.email || '').toLowerCase();
   const isAdmin = ADMIN_EMAILS.includes(email);
   let profile = null;
-  try { profile = await readProfile(user.uid); } catch (e) { console.warn('ensureProfile read failed', e); }
+  try { profile = readProfile(user.uid); } catch (e) { console.warn('ensureProfile read failed', e); }
   if (!profile) {
     const data = {
       uid: user.uid,
@@ -104,7 +125,7 @@ async function ensureProfileFromLogin(user) {
       createdAt: nowISO(),
       updatedAt: nowISO()
     };
-    try { await writeProfile(user.uid, data); } catch (e) { console.warn('ensureProfile create failed', e); }
+    try { writeProfile(user.uid, data); } catch (e) { console.warn('ensureProfile create failed', e); }
     return data;
   }
   if (isAdmin && profile.role !== 'admin') {
@@ -113,7 +134,7 @@ async function ensureProfileFromLogin(user) {
       hubs: ALL_HUBS.slice(), actions: fullActions(), pages: fullPages(),
       updatedAt: nowISO()
     };
-    try { await patchProfile(user.uid, patch); } catch (e) { console.warn('ensureProfile admin patch failed', e); }
+    try { patchProfile(user.uid, patch); } catch (e) { console.warn('ensureProfile admin patch failed', e); }
     return Object.assign({}, profile, patch);
   }
   return profile;
@@ -122,28 +143,44 @@ async function ensureProfileFromLogin(user) {
 async function register(email, password) {
   if (!email || !password) throw new Error('Email and password are required.');
   if (password.length < 6) throw new Error('Password must be at least 6 characters.');
-  const res = await workerRequest('POST', '/api/auth/register', { email, password, name: email });
-  if (!res || !res.ok) throw new Error(res && res.error ? res.error : 'Registration failed.');
-  return res.user;
+  const uid = email.toLowerCase();
+  if (readProfile(uid)) throw new Error('Account already exists');
+  const passwordHash = await hashPassword(password, '');
+  const profile = {
+    uid,
+    email: uid,
+    name: email,
+    status: 'pending',
+    role: 'user',
+    hubs: [],
+    actions: {},
+    pages: [],
+    passwordHash,
+    createdAt: nowISO(),
+    updatedAt: nowISO()
+  };
+  writeProfile(uid, profile);
+  return { ok: true, user: { uid, email, name: profile.name, status: 'pending' } };
 }
 
 async function login(email, password) {
   if (!email || !password) throw new Error('Email and password are required.');
-  const res = await workerRequest('POST', '/api/auth/login', { email, password });
-  if (!res || !res.ok) throw new Error(res && res.error ? res.error : 'Login failed.');
-  const user = res.user;
+  const uid = email.toLowerCase();
+  const profile = readProfile(uid);
+  if (!profile || !profile.passwordHash) throw new Error('Invalid email or password');
+  const ok = await verifyPassword(password, profile.passwordHash, '');
+  if (!ok) throw new Error('Invalid email or password');
+  const user = { uid, email: profile.email, name: profile.name, status: profile.status, role: profile.role };
   sessionSet(user);
   return user;
 }
 
 async function logout() {
-  try { await workerRequest('POST', '/api/auth/logout'); } catch (e) { /* ignore */ }
   sessionClear();
 }
 
 async function sendPasswordReset(email) {
-  if (!email) throw new Error('Email is required.');
-  await workerRequest('POST', '/api/auth/password-reset', { email });
+  // No email backend in localStorage mode — nothing to send.
 }
 
 function mergeHubs(names) {
@@ -166,8 +203,6 @@ const Auth = {
   _hubLast: null,
   _hubCbs: [],
   onAuthChange(cb) {
-    // No real-time auth state in Cloudflare Workers — check once on call and
-    // again whenever the caller re-invokes. The session persists in localStorage.
     const user = sessionGet();
     try { cb(user); } catch (e) { }
     return () => { /* no-op */ };
@@ -176,8 +211,7 @@ const Auth = {
     return sessionGet();
   },
   async register(email, password) {
-    const user = await register(email, password);
-    return user;
+    return await register(email, password);
   },
   async login(email, password) {
     return await login(email, password);
@@ -189,7 +223,7 @@ const Auth = {
     return await sendPasswordReset(email);
   },
   async getProfile(uid) {
-    try { return await readProfile(uid); } catch (e) { return null; }
+    try { return readProfile(uid); } catch (e) { return null; }
   },
   async ensureProfile(user) {
     return await ensureProfileFromLogin(user);
@@ -198,7 +232,6 @@ const Auth = {
     return new Promise(resolve => {
       const u = sessionGet();
       if (u) return resolve(u);
-      // No async auth state — resolve with null if no session.
       resolve(null);
     });
   },
@@ -225,7 +258,7 @@ const Auth = {
   },
   async listPending() {
     try {
-      const users = await listUsers('pending');
+      const users = listUsers('pending');
       return users.map(u => ({ uid: u.uid, id: u.uid, ...u }));
     } catch (e) {
       console.warn('listPending failed', e);
@@ -243,7 +276,7 @@ const Auth = {
   },
   async listAccounts() {
     try {
-      const users = await listUsers('approved');
+      const users = listUsers('approved');
       return users.map(u => ({ uid: u.uid, id: u.uid, ...u }));
     } catch (e) {
       console.warn('listAccounts failed', e);
@@ -265,8 +298,8 @@ const Auth = {
   },
   async _readHubs() {
     try {
-      const names = await readHubsList();
-      const active = names.filter(name => name && isHubActive(name));
+      const names = readHubsList();
+      const active = (names || []).filter(name => name && isHubActive(name));
       if (active.length) return mergeHubs(active);
     } catch (e) { }
     return ALL_HUBS.slice();
@@ -298,8 +331,8 @@ const Auth = {
   async seedHubsIfEmpty() {
     try {
       await Auth.getHubs();
-      const names = await readHubsList();
-      if (names.length) return;
+      const names = readHubsList();
+      if (names && names.length) return;
       await Promise.all(ALL_HUBS.map(h => addHubRemote(h)));
     } catch (e) { }
   }
@@ -310,11 +343,11 @@ function startHubPolling() {
   Auth._hubTimer = setInterval(async () => {
     if (document.hidden) return;
     try {
-      const names = await readHubsList();
+      const names = readHubsList();
       const snapshot = JSON.stringify(names);
       if (snapshot !== Auth._hubLast) {
         Auth._hubLast = snapshot;
-        const hubs = mergeHubs(names.filter(name => name && isHubActive(name)));
+        const hubs = mergeHubs((names || []).filter(name => name && isHubActive(name)));
         const cbs = Auth._hubCbs.slice();
         for (const cb of cbs) { try { cb(hubs); } catch (e) { } }
       }
