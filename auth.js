@@ -90,8 +90,24 @@ async function ensureProfileFromLogin(user) {
   const email = (user.email || '').toLowerCase();
   const isAdmin = ADMIN_EMAILS.includes(email);
   let profile = null;
-  try { profile = await readProfile(user.uid); } catch (e) { console.warn('ensureProfile read failed', e); }
+  let readFailed = false;
+  try {
+    profile = await readProfile(user.uid);
+  } catch (e) {
+    readFailed = true;
+    console.warn('ensureProfile read failed', e);
+  }
+  // If the profile read failed (network blip / transient Worker error), do NOT
+  // write anything — the login response already carries the correct status/role
+  // straight from R2. Writing here could overwrite the real profile with a
+  // partial one (and historically stripped the passwordHash via full replace).
+  if (readFailed) {
+    return user;
+  }
   if (!profile) {
+    // Profile genuinely does not exist yet (brand-new user). Create it with a
+    // PATCH (merge) so any existing fields — especially passwordHash — are
+    // preserved. writeProfile does a full-document replace and would wipe them.
     const data = {
       uid: user.uid,
       email: user.email || '',
@@ -100,11 +116,11 @@ async function ensureProfileFromLogin(user) {
       role: isAdmin ? 'admin' : 'user',
       hubs: isAdmin ? ALL_HUBS.slice() : [],
       actions: isAdmin ? fullActions() : emptyActions(),
-      pages: isAdmin ? fullPages() : fullPages(),
+      pages: fullPages(),
       createdAt: nowISO(),
       updatedAt: nowISO()
     };
-    try { await writeProfile(user.uid, data); } catch (e) { console.warn('ensureProfile create failed', e); }
+    try { await patchProfile(user.uid, data); } catch (e) { console.warn('ensureProfile create failed', e); }
     return data;
   }
   if (isAdmin && profile.role !== 'admin') {
