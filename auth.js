@@ -2,7 +2,7 @@
 // Backed by the Cloudflare Worker API (no Firebase).
 // Loaded as a module on every page (after cloudflare-config.js + cloudflare-api.js).
 
-const ALL_HUBS = ['Abra-Bucay', 'Bacarra', 'Badoc', 'Bangued', 'Bangui', 'Bantay', 'Bauko', 'Buguias', 'Candon', 'Dolores-Abra', 'Ilocos Sur', 'Ilocos Sur-Santa Lucia', 'Ilocos Sur-Santa Maria', 'Irisan', 'Itogon', 'Itogon Tuding', 'Kapangan', 'La Paz Abra', 'La Trinidad Pico', 'Laoag', 'MB Atok', 'Narvacan', 'North Laoag', 'San Nicolas', 'Santo Domingo', 'Tagudin'];
+const ALL_HUBS = ['Abra-Bucay', 'Bacarra', 'Badoc', 'Bangued', 'Bangui', 'Bantay', 'Bauko', 'Buguias', 'Candon', 'Dolores-Abra', 'Ilocos Sur', 'Ilocos Sur-Santa Lucia', 'Ilocos Sur-Santa Maria', 'Irisan', 'Itogon', 'Itogon-Tuding', 'Kapangan', 'La Paz Abra', 'La Trinidad-Pico', 'Laoag', 'MB Abra San Isidro', 'MB Atok', 'MB Balaoi', 'MB Bokod', 'MB Dinaratan', 'MB Ester', 'MB Gregorio', 'MB Luba', 'MB Pasuquin', 'MB Pilar', 'MB Tamdagan', 'MB Tubo Abra', 'Narvacan', 'North Laoag', 'San Nicolas', 'Santo Domingo', 'Tagudin'];
 const REMOVED_HUBS = ['MB Mankayan'];
 function isHubActive(hub) {
   return !REMOVED_HUBS.some(removed => removed.toLowerCase() === String(hub || '').trim().toLowerCase());

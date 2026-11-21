@@ -115,7 +115,7 @@ import { cachedFetchText } from './data-cache.js';
   /* ---------------- Storage helpers ---------------- */
   // Hubs are now loaded dynamically from the Cloudflare Worker (see Auth.getHubs()).
   // The hardcoded list is retained as a fallback when the Worker is unavailable.
-  const HUB_FALLBACK = ['Abra-Bucay','Bacarra','Badoc','Bangued','Bangui','Bantay','Bauko','Buguias','Candon','Dolores-Abra','Ilocos Sur','Ilocos Sur-Santa Lucia','Ilocos Sur-Santa Maria','Irisan','Itogon','Itogon Tuding','Kapangan','La Paz Abra','La Trinidad Pico','Laoag','MB Atok','Narvacan','North Laoag','San Nicolas','Santo Domingo','Tagudin'];
+  const HUB_FALLBACK = ['Abra-Bucay','Bacarra','Badoc','Bangued','Bangui','Bantay','Bauko','Buguias','Candon','Dolores-Abra','Ilocos Sur','Ilocos Sur-Santa Lucia','Ilocos Sur-Santa Maria','Irisan','Itogon','Itogon-Tuding','Kapangan','La Paz Abra','La Trinidad-Pico','Laoag','MB Abra San Isidro','MB Atok','MB Balaoi','MB Bokod','MB Dinaratan','MB Ester','MB Gregorio','MB Luba','MB Pasuquin','MB Pilar','MB Tamdagan','MB Tubo Abra','Narvacan','North Laoag','San Nicolas','Santo Domingo','Tagudin'];
   const REMOVED_HUBS = ['MB Mankayan'];
 
   function isHubActive(hub) {

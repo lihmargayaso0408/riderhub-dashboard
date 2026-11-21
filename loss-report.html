@@ -45,6 +45,7 @@
     table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:1400px;}
     th, td{padding:9px 11px;border-bottom:1px solid var(--line-2);text-align:left;white-space:nowrap;}
     th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);cursor:pointer;user-select:none;}
+    td.sample-cell{white-space:normal;word-break:break-all;}
     th:hover{color:var(--text);}
     tbody tr{transition:background .12s ease;}
     tbody tr:hover{background:var(--hover);}
@@ -108,9 +109,8 @@
 <th data-sort="total_cogs_usd">Total COGS (₱)</th>
             <th data-sort="RR_identifier">RR Identifier</th>
             <th data-sort="sample">Sample</th>
-<th data-sort="RTS_identifier">RTS Identifier</th>
+            <th data-sort="RTS_identifier">RTS Identifier</th>
             <th data-sort="Mother_hub_for_MB">Mother Hub for MB</th>
-            <th data-sort="status">Status</th>
           </tr>
         </thead>
         <tbody id="lossRows"></tbody>
@@ -260,6 +260,37 @@
       const d = new Date(dateStr);
       if (isNaN(d)) return '';
       return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    }
+
+    function lossWindow() {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = now.getMonth();
+      return {
+        start: new Date(y, m - 1, 26),
+        end: new Date(y, m, 25)
+      };
+    }
+
+    function parseReportDate(dateStr) {
+      if (!dateStr) return null;
+      const s = String(dateStr).trim();
+      const iso = s.match(/^(\d{4})[-/](\d{2})[-/](\d{2})/);
+      if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+      const d = new Date(s);
+      return isNaN(d) ? null : d;
+    }
+
+    function dateKey(d) {
+      return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+    }
+
+    function isInLossWindow(dateStr) {
+      const d = parseReportDate(dateStr);
+      if (!d) return false;
+      const w = lossWindow();
+      const v = dateKey(d);
+      return v >= dateKey(w.start) && v <= dateKey(w.end);
     }
 
     function populateMonthFilter() {
@@ -418,7 +449,8 @@ const USD_TO_PHP = 56.0; // Exchange rate: 1 USD = ₱56 (adjust as needed)
         populateMonthFilter();
         renderStats();
         renderRows();
-        statusEl.textContent = `Loaded ${allRows.length} loss records from all hubs`;
+        const w = lossWindow();
+        statusEl.textContent = `Loaded ${allRows.length} loss records — showing ${w.start.getDate()}/${String(w.start.getMonth()+1).padStart(2,'0')}/${w.start.getFullYear()} to ${w.end.getDate()}/${String(w.end.getMonth()+1).padStart(2,'0')}/${w.end.getFullYear()}`;
       } catch (err) {
         if (loadSequence !== sheetLoadSequence) return;
         console.error(err);
@@ -439,6 +471,7 @@ function normalizeStatusVal(status) {
         const targetHub = normalizeHubName(currentHub);
         rows = rows.filter(r => normalizeHubName(r.hub) === targetHub);
       }
+      rows = rows.filter(r => isInLossWindow(r.report_date));
       if (selectedMonth) {
         rows = rows.filter(r => getMonthKey(r.report_date) === selectedMonth);
       }
@@ -555,10 +588,9 @@ String(r.RTS_identifier || '').toLowerCase().includes(q) ||
             <td class="num">${escapeHtml(r.num_loss)}</td>
 <td class="money">${fmtMoney(r.total_cogs_usd)}</td>
             <td>${escapeHtml(r.RR_identifier)}</td>
-            <td>${escapeHtml(r.sample)}</td>
+            <td class="sample-cell">${escapeHtml(r.sample)}</td>
             <td>${escapeHtml(r.RTS_identifier)}</td>
             <td>${escapeHtml(r.Mother_hub_for_MB)}</td>
-            <td>${getStatusChip(r.status)}</td>
           </tr>
         `;
       }).join('');
