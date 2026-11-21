@@ -14,6 +14,7 @@ const ALL_ACTIONS = ['upload', 'delete', 'download'];
 const ALL_PAGES = [
   { key: 'loss', file: 'loss-report.html' },
   { key: 'ranking', file: 'rider-ranking.html' },
+  { key: 'hub-ranking', file: 'hub-ranking.html' },
   { key: 'accounts', file: 'accounts.html' },
   { key: 'hub-location', file: 'hub-location.html' }
 ];

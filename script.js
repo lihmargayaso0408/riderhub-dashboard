@@ -1133,19 +1133,36 @@ await renderTrend();
     }
     function onStart(e){
       if(e.target.closest('th')) return;
-      const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
-      dashDragState = { startX: pt.clientX, startY: pt.clientY, startLeft: scrollEl.scrollLeft, moved:false };
-      scrollEl.classList.add('dragging');
-      document.body.style.userSelect = 'none';
-      document.body.style.webkitUserSelect = 'none';
+      if(e.button !== undefined && e.button !== 0) return;
+      const isTouch = !!(e.touches && e.touches[0]);
+      const pt = isTouch ? e.touches[0] : e;
+      dashDragState = { startX: pt.clientX, startY: pt.clientY, startLeft: scrollEl.scrollLeft, moved:false, touch:isTouch };
+      // Touch has no text selection, so engage drag-scroll immediately.
+      if(isTouch){
+        scrollEl.classList.add('dragging');
+        document.body.style.userSelect = 'none';
+        document.body.style.webkitUserSelect = 'none';
+      }
     }
     function onMove(e){
       if(!dashDragState) return;
       const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
       const dx = pt.clientX - dashDragState.startX;
       const dy = pt.clientY - dashDragState.startY;
-      if(!dashDragState.moved && Math.abs(dx) > 6 && Math.abs(dx) > Math.abs(dy)) dashDragState.moved = true;
-      if(!dashDragState.moved) return;
+      if(!dashDragState.moved){
+        const horizontal = Math.abs(dx) > 6 && Math.abs(dx) > Math.abs(dy);
+        // For a mouse, only take over the gesture when the table actually
+        // overflows sideways, so ordinary click-drag text highlighting still
+        // works whenever the table fits.
+        if(horizontal && (dashDragState.touch || overflows())){
+          dashDragState.moved = true;
+          scrollEl.classList.add('dragging');
+          document.body.style.userSelect = 'none';
+          document.body.style.webkitUserSelect = 'none';
+        } else {
+          return;
+        }
+      }
       if(e.cancelable) e.preventDefault();
       scrollEl.scrollLeft = dashDragState.startLeft - dx;
       updateHint();
@@ -2269,18 +2286,35 @@ $('#downloadHubSelect').addEventListener('change', populateDownloadWeekOptions);
       }
       function start(e){
         if(e.target.closest('th')) return;
-        const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
-        ds = { sx: pt.clientX, sy: pt.clientY, sl: wrap.scrollLeft, moved:false };
-        wrap.classList.add('dragging');
-        document.body.style.userSelect = 'none';
-        document.body.style.webkitUserSelect = 'none';
+        if(e.button !== undefined && e.button !== 0) return;
+        const isTouch = !!(e.touches && e.touches[0]);
+        const pt = isTouch ? e.touches[0] : e;
+        ds = { sx: pt.clientX, sy: pt.clientY, sl: wrap.scrollLeft, moved:false, touch:isTouch };
+        // Touch has no text selection, so engage drag-scroll immediately.
+        if(isTouch){
+          wrap.classList.add('dragging');
+          document.body.style.userSelect = 'none';
+          document.body.style.webkitUserSelect = 'none';
+        }
       }
       function move(e){
         if(!ds) return;
         const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
         const dx = pt.clientX - ds.sx, dy = pt.clientY - ds.sy;
-        if(!ds.moved && Math.abs(dx) > 6 && Math.abs(dx) > Math.abs(dy)) ds.moved = true;
-        if(!ds.moved) return;
+        if(!ds.moved){
+          const horizontal = Math.abs(dx) > 6 && Math.abs(dx) > Math.abs(dy);
+          // For a mouse, only take over the gesture when the table actually
+          // overflows sideways, so ordinary click-drag text highlighting still
+          // works whenever the table fits.
+          if(horizontal && (ds.touch || flows())){
+            ds.moved = true;
+            wrap.classList.add('dragging');
+            document.body.style.userSelect = 'none';
+            document.body.style.webkitUserSelect = 'none';
+          } else {
+            return;
+          }
+        }
         if(e.cancelable) e.preventDefault();
         wrap.scrollLeft = ds.sl - dx;
         update();

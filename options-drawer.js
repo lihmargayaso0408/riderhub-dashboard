@@ -79,6 +79,7 @@
     var drawerBody = '<div class="drawer-body">'
       + item('optHomeBtn', 'Rider Performance System', svgHome)
       + item('optLossBtn', 'Loss Report per hub', svgLoss)
++ item('optHubRankingBtn', 'Hub Ranking', svgRiders)
        + item('optAccountsBtn', 'Manage Accounts', svgAccounts)
        + item('optLogoutBtn', 'Log out', svgLogout)
       + '<button class="drawer-item drawer-item-theme" id="optThemeToggle" type="button">'
@@ -202,6 +203,8 @@ function wireEvents() {
     var logout = document.getElementById('optLogoutBtn');
     if (home) home.addEventListener('click', go('index.html'));
     if (loss) loss.addEventListener('click', go('loss-report.html'));
+var hubRanking = document.getElementById('optHubRankingBtn');
+if (hubRanking) hubRanking.addEventListener('click', go('hub-ranking.html'));
     var accounts = document.getElementById('optAccountsBtn');
     if (accounts) accounts.addEventListener('click', go('accounts.html'));
     if (logout) logout.addEventListener('click', async function(){
@@ -246,9 +249,9 @@ saveTheme(next);
         var isAdmin = Auth.ADMIN_EMAILS && Auth.ADMIN_EMAILS.indexOf(String(u.email || '').toLowerCase()) !== -1;
         if (!isAdmin && profile && profile.pages && profile.pages.length) {
 var pageMap = {
-             'optLossBtn': 'loss',
-             'optAccountsBtn': 'accounts'
-           };
+              'optLossBtn': 'loss',
+              'optAccountsBtn': 'accounts'
+            };
           Object.keys(pageMap).forEach(function(id){
             var el = document.getElementById(id);
             if (el && profile.pages.indexOf(pageMap[id]) === -1) {
